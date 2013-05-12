@@ -3,13 +3,13 @@
 %{
 #include "config_parser.h"
 
-const char *conffilename = "foo"; // TODO
+extern const char *conffile;
 
 int init_lexer(void)
 {
-	yyin = fopen(conffilename, "r");
+	yyin = fopen(conffile, "r");
 	if (yyin == NULL) {
-		fprintf(stderr, "Unable to open config file %s: %s\n", conffilename,
+		fprintf(stderr, "Unable to open config file %s: %s\n", conffile,
 				strerror(errno));
 		exit(EXIT_FAILURE);
 	}
@@ -21,6 +21,14 @@ int init_lexer(void)
 
 \"[^"\n]+[\"\n]		yytext[yyleng-1] = 0; yylval.text = yytext+1; return STRING;
 [0-9]+			yylval.num=atoi(yytext); return NUMBER;
+
+http-listen	return HTTPLISTEN;
+frontend	return FRONTEND;
+adapter		return ADAPTER;
+lof1		return LOF1;
+lof2		return LOF2;
+slof		return SLOF;
+channels	return CHANNELSCONF;
 
 ;			return SEMICOLON;
 [ \t\r\n]+		;

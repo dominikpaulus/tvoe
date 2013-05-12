@@ -13,4 +13,5 @@ INCLUDE_DIRECTORIES($(CMAKE_CURRENT_SOURCE_DIR)
 ${CMAKE_CURRENT_BINARY_DIR})
 
 ADD_EXECUTABLE(getstream ${BISON_ConfigParser_OUTPUTS}
-	${FLEX_ConfigLexer_OUTPUTS} getstream.c)
+	${FLEX_ConfigLexer_OUTPUTS} getstream.c http.c)
+TARGET_LINK_LIBRARIES(getstream event) # TODO
