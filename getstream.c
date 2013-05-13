@@ -75,8 +75,8 @@ int main(int argc, char **argv) {
 		freopen("/dev/null", "w", stderr);
 	}
 
-	struct tune s = { 5, { 6, 22000 * 1000, 11347000, true }, 28106 };
-	printf("%d\n", subscribe_to_frontend(s));
+	struct tune s = { 5, { 6, 11347000, 22000 * 1000, true }, 28106 };
+	//printf("%d\n", subscribe_to_frontend(s));
 	//release_frontend(s);
 
 	event_dispatch();

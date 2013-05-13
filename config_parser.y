@@ -5,8 +5,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include "http.h"
 #include "frontend.h"
+#include "channels.h"
 
 extern FILE *yyin;
 extern int yylineno;
@@ -14,7 +16,7 @@ extern int yylex(void);
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
-static int adapter, fe;
+static int adapter;
 
 void yyerror(const char *str)
 {
@@ -57,12 +59,19 @@ void init_parser() {
 
 statements: 
 		    | statements statement SEMICOLON;
-statement: http | frontend;
+statement: http | frontend | channels;
 
 http: HTTPLISTEN NUMBER {
 	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(httpd, "::", $2);
 	if(handle == NULL) {
 		fprintf(stderr, "Unable to bind to port %d. Exiting\n", $2);
+		exit(EXIT_FAILURE);
+	}
+}
+
+channels: CHANNELSCONF STRING {
+	if(parse_channels($2)) {
+		parse_error("parse_channels() failed");
 		exit(EXIT_FAILURE);
 	}
 }

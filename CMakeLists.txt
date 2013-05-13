@@ -17,5 +17,6 @@ ${GLIB_INCLUDE_DIR}
 /usr/lib/glib-2.0/include) # FIXME
 
 ADD_EXECUTABLE(getstream ${BISON_ConfigParser_OUTPUTS}
-	${FLEX_ConfigLexer_OUTPUTS} getstream.c http.c frontend.c log.c mpeg.c)
+	${FLEX_ConfigLexer_OUTPUTS} getstream.c http.c frontend.c log.c mpeg.c
+	channels.c)
 TARGET_LINK_LIBRARIES(getstream event glib-2.0) # TODO

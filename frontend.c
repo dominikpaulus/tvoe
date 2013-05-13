@@ -44,7 +44,7 @@ static int get_frequency(int freq, struct lnb l) {
 
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
-	char buf[4096 * 188];
+	unsigned char buf[4096 * 188];
 	int n = read(fd, buf, sizeof(buf));
 	handle_input(fe->mpeg_handle, buf, n);
 }

@@ -4,12 +4,12 @@
 #include <stdbool.h>
 
 struct tune {
-	unsigned int type;
+	unsigned int type; // unused
 //	union {
 	struct {
 		unsigned int delivery_system;
-		unsigned int symbol_rate;
 		unsigned int frequency;
+		unsigned int symbol_rate;
 		bool polarization; // true: horizontal, false: vertical
 	} dvbs;
 	unsigned int sid;
