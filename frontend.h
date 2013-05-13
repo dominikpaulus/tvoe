@@ -1,6 +1,8 @@
 #ifndef __INCLUDED_GETSH_FRONTEND
 #define __INCLUDED_GETSH_FRONTEND
 
+#include <stdbool.h>
+
 struct tune {
 	unsigned int type;
 //	union {

@@ -6,10 +6,15 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "http.h"
+#include "frontend.h"
 
 extern FILE *yyin;
 extern int yylineno;
 extern int yylex(void);
+
+/* Temporary variables needed while parsing */
+static struct lnb l;
+static int adapter, fe;
 
 void yyerror(const char *str)
 {
@@ -17,7 +22,6 @@ void yyerror(const char *str)
 	exit(EXIT_FAILURE);
 }
 
-/*
 static void parse_error(char *text, ...) 
 {
 	static char error[1024];
@@ -27,7 +31,6 @@ static void parse_error(char *text, ...)
 	va_end(args);
 	yyerror(error);
 }
-*/
 
 int yywrap()
 {
@@ -36,8 +39,8 @@ int yywrap()
 }
 
 void init_parser() {
-
 }
+
 %}
 
 %union
@@ -54,7 +57,7 @@ void init_parser() {
 
 statements: 
 		    | statements statement SEMICOLON;
-statement: http;
+statement: http frontend;
 
 http: HTTPLISTEN NUMBER {
 	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(httpd, "::", $2);
@@ -62,4 +65,32 @@ http: HTTPLISTEN NUMBER {
 		fprintf(stderr, "Unable to bind to port %d. Exiting\n", $2);
 		exit(EXIT_FAILURE);
 	}
+}
+
+frontend: FRONTEND '{' frontendoptions {
+	if(!adapter)
+		parse_error("frontend block needs an adapter number");
+	/* Default Universal LNB */
+	if(!l.lof1)
+		l.lof1 = 9750000;
+	if(!l.lof2)
+		l.lof2 = 10600000;
+	if(!l.slof)
+		l.slof = 11700000;
+	add_frontend(adapter, 0, l);
+		
+}
+frontendoptions: | frontendoptions frontendoption;
+frontendoption: adapter | lof1 | lof2 | slof;
+adapter: ADAPTER NUMBER SEMICOLON {
+	adapter = $2;
+}
+lof1: LOF1 NUMBER SEMICOLON {
+	l.lof1 = $2;
+}
+lof2: LOF2 NUMBER SEMICOLON {
+	l.lof2 = $2;
+}
+slof: SLOF NUMBER SEMICOLON {
+	l.slof = $2;
 }
