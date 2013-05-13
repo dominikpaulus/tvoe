@@ -27,7 +27,7 @@ static int sid_map[0x2000];
  * @param p Pointer to struct pmt_handle
  */
 static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
-
+	logger(LOG_DEBUG, "New PMT found");
 }
 
 /*
@@ -47,8 +47,10 @@ static void pat_handler(void *p, dvbpsi_pat_t *pat) {
 		 * stuff. We skip them for now, TODO: Handle and forward them
 		 * appropiately.
 		 */
-		if(p_program->i_number == 0) // NIT and other stuff
+		if(p_program->i_number == 0) { // NIT and other stuff
+			p_program = p_program->p_next;
 			continue;
+		}
 		sid_map[p_program->i_pid] = p_program->i_number;
 		/*
 		 * Map PMT PID to corresponding SID. Add parser to handle PMTs for this
@@ -76,18 +78,37 @@ static void pat_handler(void *p, dvbpsi_pat_t *pat) {
 		}
 		p_program = p_program->p_next;
 	}
+	logger(LOG_DEBUG, "PAT parsing finished");
 	dvbpsi_pat_delete(pat);
 	return;
 }
 
+void handle_input(void *ptr, unsigned char *data, size_t len) {
+	struct mpeg_handle *handle = (struct mpeg_handle *) ptr;
+	int i;
+	if(len % 188) {
+		logger(LOG_NOTICE, "Unabligned MPEG-TS packets received, dropping.");
+		return;
+	}
+	for(i=0; i+188<len; i+=188) {
+		dvbpsi_packet_push(handle->pat, data+i);
+		GList *h = handle->pmts;
+		while(h) {
+			struct pmt_handle *he = (struct pmt_handle *) h->data;
+			dvbpsi_packet_push(he->handler, data+i);
+			h = g_list_next(h);
+		}
+	}
+}
+
 void *register_transponder(struct tune s) {
-	struct mpeg_handle *h = g_malloc(sizeof(struct mpeg_handle));
+	struct mpeg_handle *h = g_slice_alloc0(sizeof(struct mpeg_handle));
 	h->pat = dvbpsi_new(NULL, DVBPSI_MSG_DEBUG);
 	if(!h->pat) {
 		logger(LOG_CRIT, "dvbpsi_new() failed");
 		return NULL;
 	}
-	if(!dvbpsi_pat_attach(h->pat, pat_handler, NULL))  {
+	if(!dvbpsi_pat_attach(h->pat, pat_handler, h))  {
 		logger(LOG_CRIT, "Failed to attach libdvbpsi PAT decoder");
 		dvbpsi_delete(h->pat);
 		return NULL;

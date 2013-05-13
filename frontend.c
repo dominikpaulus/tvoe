@@ -38,12 +38,8 @@ static int get_frequency(int freq, struct lnb l) {
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
 	char buf[4096 * 188];
-	int n;
-	printf("Starting read\n");
-	printf("%d\n", (n = read(fd, buf, sizeof(buf))));
-	if(n % 188)
-		printf("Unaligned!\n");
-	//handle_input(fe->mpeg_handle, buf, n);
+	int n = read(fd, buf, sizeof(buf));
+	handle_input(fe->mpeg_handle, buf, n);
 }
 
 int subscribe_to_frontend(struct tune s) {
