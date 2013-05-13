@@ -6,6 +6,6 @@
 
 void *register_transponder(struct tune s);
 void unregister_transponder(void *handle);
-void handle_input(unsigned char *data, size_t len);
+void handle_input(void *handle, unsigned char *data, size_t len);
 
 #endif

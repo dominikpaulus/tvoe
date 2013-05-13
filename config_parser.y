@@ -57,7 +57,7 @@ void init_parser() {
 
 statements: 
 		    | statements statement SEMICOLON;
-statement: http frontend;
+statement: http | frontend;
 
 http: HTTPLISTEN NUMBER {
 	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(httpd, "::", $2);
@@ -67,7 +67,7 @@ http: HTTPLISTEN NUMBER {
 	}
 }
 
-frontend: FRONTEND '{' frontendoptions {
+frontend: FRONTEND '{' frontendoptions '}' {
 	if(!adapter)
 		parse_error("frontend block needs an adapter number");
 	/* Default Universal LNB */

@@ -32,11 +32,18 @@ struct frontend {
 };
 
 static int get_frequency(int freq, struct lnb l) {
-	return 0; // TODO
+	return 1597000;
 }
 
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
-	
+	struct frontend *fe = (struct frontend *) arg;
+	char buf[4096 * 188];
+	int n;
+	printf("Starting read\n");
+	printf("%d\n", (n = read(fd, buf, sizeof(buf))));
+	if(n % 188)
+		printf("Unaligned!\n");
+	//handle_input(fe->mpeg_handle, buf, n);
 }
 
 int subscribe_to_frontend(struct tune s) {
@@ -61,11 +68,12 @@ int acquire_frontend(struct tune s) {
 	GList *f = g_list_first(idle_fe);
 	if(!f)
 		return -1;
-	idle_fe = g_list_remove(idle_fe, f->data);
 	struct frontend *fe = (struct frontend *) (f->data);
+	idle_fe = g_list_remove(idle_fe, f->data);
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
 	fe->event = NULL;
 	fe->in = s;
+	fe->users = 1;
 
 	char path[512];
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
@@ -83,7 +91,7 @@ int acquire_frontend(struct tune s) {
 		struct dtv_properties cmds;
 		p[0].cmd = DTV_CLEAR;
 		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = SYS_DVBS2; // TODO
-		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = s.dvbs.symbol_rate;
+		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = 22000 * 1000; //s.dvbs.symbol_rate;
 		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = FEC_AUTO;
 		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
@@ -126,7 +134,7 @@ int acquire_frontend(struct tune s) {
 	}
 	logger(LOG_DEBUG, "Opening dvr interface");
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
-	fe->dvr_fd = open(path, O_RDONLY);
+	fe->dvr_fd = open(path, O_RDONLY | O_NONBLOCK);
 	if(!fe->dvr_fd) {
 		logger(LOG_CRIT, "Failed to open dvr device for frontend %d/%d",
 				fe->adapter, fe->frontend);
@@ -134,7 +142,7 @@ int acquire_frontend(struct tune s) {
 	}
 	logger(LOG_DEBUG, "Successfully opened frontend! :-)");
 
-	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ, dvr_callback, fe);
+	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
 	struct timeval tv = { 30, 0 }; // 30s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_CRIT, "Adding frontend to libevent failed.");

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "http.h"
+#include "frontend.h" // XXX
 
 const char *conffile = "./getstream.conf";
 int loglevel = 1;
@@ -73,6 +74,10 @@ int main(int argc, char **argv) {
 		freopen("/dev/null", "w", stdout);
 		freopen("/dev/null", "w", stderr);
 	}
+
+	struct tune s = { 5, { 5, 27500 * 1000, 11836 * 1000, true }, 28106 };
+	printf("%d\n", subscribe_to_frontend(s));
+	//release_frontend(s);
 
 	event_dispatch();
 
