@@ -16,16 +16,19 @@
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
+#include "frontend.h"
 
 static GList *idle_fe, *used_fe;
+static int acquire_frontend(struct tune s);
 
-struct tune_data {
+struct frontend {
 	struct tune in;
 	struct lnb lnb;
 	struct event *event;
 	void *mpeg_handle;
 	int adapter, frontend;
 	int fe_fd, dmx_fd, dvr_fd;
+	int users;
 };
 
 static int get_frequency(int freq, struct lnb l) {
@@ -36,12 +39,30 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	
 }
 
+int subscribe_to_frontend(struct tune s) {
+	GList *it = used_fe;
+	// Check whether we have already tuned to this transponder
+	while(it) {
+		struct tune in = ((struct frontend *) it->data)->in;
+		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
+				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
+				in.dvbs.frequency == s.dvbs.frequency &&
+				in.dvbs.polarization == s.dvbs.polarization) {
+			((struct frontend *) it->data)->users++;
+			return 0;
+		}
+		it = g_list_next(it);
+	}
+	// We don't, acquire a new tuner
+	return acquire_frontend(s);
+}
+
 int acquire_frontend(struct tune s) {
 	GList *f = g_list_first(idle_fe);
 	if(!f)
 		return -1;
 	idle_fe = g_list_remove(idle_fe, f->data);
-	struct tune_data *fe = (struct tune_data *) f->data;
+	struct frontend *fe = (struct frontend *) (f->data);
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
 	fe->event = NULL;
 	fe->in = s;
@@ -61,12 +82,12 @@ int acquire_frontend(struct tune s) {
 		struct dtv_property p[8];
 		struct dtv_properties cmds;
 		p[0].cmd = DTV_CLEAR;
-		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = SYS_DVBS2;
+		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = SYS_DVBS2; // TODO
 		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = s.dvbs.symbol_rate;
 		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = FEC_AUTO;
 		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
-		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = SEC_VOLTAGE_13;
+		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = SEC_VOLTAGE_13; //TODO
 		p[7].cmd = DTV_TUNE;				p[7].u.data = 0;
 		cmds.num = 8;
 		cmds.props = p;
@@ -146,7 +167,36 @@ fail:
 }
 
 void release_frontend(struct tune s) {
-
+	GList *it = used_fe;
+	struct frontend *fe;
+	// Reduce user count
+	while(it) {
+		fe = (struct frontend *) (it->data);
+		struct tune in = fe->in;
+		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
+				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
+				in.dvbs.frequency == s.dvbs.frequency &&
+				in.dvbs.polarization == s.dvbs.polarization) {
+			fe->users--;
+			if(fe->users) // Still users present. Nothing to do;
+				return;
+			break;
+		}
+		it = g_list_next(it);
+	}
+	if(!it)	{ // No tuned transponder found?
+		logger(LOG_NOTICE, "release_frontend() on unknown tuner");
+		return;
+	}
+	// Last user on transponder removed, release frontend
+	event_del(fe->event);
+	event_free(fe->event);
+	close(fe->fe_fd);
+	close(fe->dmx_fd);
+	close(fe->dvr_fd);
+	unregister_transponder(fe->mpeg_handle);
+	used_fe = g_list_remove_link(used_fe, it);
+	idle_fe = g_list_append(idle_fe, fe);
 }
 
 void add_frontend(int adapter, int frontend, struct lnb l) {

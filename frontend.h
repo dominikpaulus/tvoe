@@ -8,7 +8,7 @@ struct tune {
 		unsigned int delivery_system;
 		unsigned int symbol_rate;
 		unsigned int frequency;
-		unsigned int voltage;
+		bool polarization; // true: horizontal, false: vertical
 	} dvbs;
 	unsigned int sid;
 //	};
@@ -18,7 +18,7 @@ struct lnb {
 	int lof1, lof2, slof;
 };
 
-int acquire_frontend(struct tune s);
+int subscribe_to_frontend(struct tune s);
 void release_frontend(struct tune s);
 void add_frontend(int adapter, int frontend, struct lnb l);
 void remove_frontend(int adapter, int frontend);

@@ -39,7 +39,7 @@ void *register_transponder(struct tune s) {
 		return NULL;
 	}
 	*/
-	if(!dvbpsi_pat_attach(h->pat, pat_handler, NULL)) 
+	if(!dvbpsi_pat_attach(h->pat, pat_handler, NULL))  {
 //			!dvbpsi_pmt_attach(h->pmt, pmt_handler, NULL)) {
 		logger(LOG_CRIT, "Failed to attach libdvbpsi PAT decoder");
 		dvbpsi_delete(h->pat);
@@ -47,4 +47,8 @@ void *register_transponder(struct tune s) {
 		return NULL;
 	}
 	return h;
+}
+
+void unregister_transponder(void *handle) {
+
 }
