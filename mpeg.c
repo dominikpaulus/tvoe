@@ -30,6 +30,9 @@ static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
 	logger(LOG_DEBUG, "New PMT found");
 }
 
+void (*callb) (struct evbuffer *, void *);
+void *callarg;
+
 /*
  * Process a new parsed PAT on input stream. Add PMT parsers for all referenced
  * channels, if necessary.
@@ -90,6 +93,10 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		logger(LOG_NOTICE, "Unabligned MPEG-TS packets received, dropping.");
 		return;
 	}
+	struct evbuffer *tmp = evbuffer_new();
+	evbuffer_add(tmp, data, len);
+	callb(tmp, callarg);
+	evbuffer_free(tmp);
 	for(i=0; i+188<len; i+=188) {
 		dvbpsi_packet_push(handle->pat, data+i);
 		GList *h = handle->pmts;
@@ -99,6 +106,12 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 			h = g_list_next(h);
 		}
 	}
+}
+
+int register_client(int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
+	callb = cb;
+	callarg = ptr;
+	return 0;
 }
 
 void *register_transponder(struct tune s) {

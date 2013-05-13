@@ -98,7 +98,7 @@ int acquire_frontend(struct tune s) {
 		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = FEC_AUTO;
 		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
-		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = s.dvbs.polarization ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18;
+		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = s.dvbs.polarization ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13;
 		p[7].cmd = DTV_TUNE;				p[7].u.data = 0;
 		cmds.num = 8;
 		cmds.props = p;

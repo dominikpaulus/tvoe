@@ -1,6 +1,7 @@
 #include <glib.h>
 #include "frontend.h"
 #include "log.h"
+#include "mpeg.h"
 #include "http.h"
 
 struct evhttp *httpd;
@@ -11,10 +12,16 @@ static void http_closecb(struct evhttp_connection *req, void *ptr) {
 	printf("Connection closed\n");
 }
 
+static void http_sendcb(struct evbuffer *buf, void *ptr) {
+	evhttp_send_reply_chunk(ptr, buf);
+}
+
 static void http_callback(struct evhttp_request *req, void *ptr) {
 	struct tune *t = (struct tune *) ptr;
 	logger(LOG_INFO, "New request for SID %d", t->sid);
 	printf("%d\n", subscribe_to_frontend(*t));
+	printf("%d\n", register_client(t->sid, http_sendcb, req));
+//	printf("%d\n", register_transponder(*t, http_sendcb, req));
 	evhttp_send_reply_start(req, 200, "OK");
 	struct evbuffer *foo = evbuffer_new();
 	evbuffer_add(foo, "asdf", 4);
