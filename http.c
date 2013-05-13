@@ -1,17 +1,20 @@
 #include <glib.h>
+#include "frontend.h"
 #include "log.h"
 #include "http.h"
 
 struct evhttp *httpd;
 
 static void http_closecb(struct evhttp_connection *req, void *ptr) {
+	struct tune *t = (struct tune *) ptr;
+	release_frontend(*t);
 	printf("Connection closed\n");
-	// TODO
 }
 
 static void http_callback(struct evhttp_request *req, void *ptr) {
 	struct tune *t = (struct tune *) ptr;
 	logger(LOG_INFO, "New request for SID %d", t->sid);
+	printf("%d\n", subscribe_to_frontend(*t));
 	evhttp_send_reply_start(req, 200, "OK");
 	struct evbuffer *foo = evbuffer_new();
 	evbuffer_add(foo, "asdf", 4);
