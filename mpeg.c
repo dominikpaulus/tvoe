@@ -10,18 +10,74 @@
 #include "mpeg.h"
 #include "log.h"
 
+struct pmt_handle {
+	dvbpsi_t *handler;
+	int pmt_id, sid;
+};
 struct mpeg_handle {
-	dvbpsi_t *pat, *pmt;
+	dvbpsi_t *pat;
+	GList *pmts;
 };
 
-static bool pmt_handled[0x2000+1];
+static bool pmt_handled[0x2000];
+static int sid_map[0x2000];
 
-static void pat_handler(void *p, dvbpsi_pat_t *pat) {
+/*
+ * Process a new parsed PMT. Map PIDs to corresponding SIDs.
+ * @param p Pointer to struct pmt_handle
+ */
+static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
 
 }
 
-static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
+/*
+ * Process a new parsed PAT on input stream. Add PMT parsers for all referenced
+ * channels, if necessary.
+ * @param p Pointer to struct mpeg_handle
+ */
+static void pat_handler(void *p, dvbpsi_pat_t *pat) {
+	logger(LOG_DEBUG, "New PAT found");
+	struct mpeg_handle *h = (struct mpeg_handle *) p;
+	dvbpsi_pat_program_t *p_program = pat->p_first_program;
+	// Iterate over PAT entries
+	while(p_program) {
+		logger(LOG_DEBUG, "PAT entry: Channel %d PMT is at PID %d", p_program->i_number, p_program->i_pid);
+		/*
+		 * PAT entries for PID 0 are special PIDs for NIT tables and other
+		 * stuff. We skip them for now, TODO: Handle and forward them
+		 * appropiately.
+		 */
+		if(p_program->i_number == 0) // NIT and other stuff
+			continue;
+		sid_map[p_program->i_pid] = p_program->i_number;
+		/*
+		 * Map PMT PID to corresponding SID. Add parser to handle PMTs for this
+		 * SID.
+		 */
+		if(!pmt_handled[p_program->i_pid]) {
+			dvbpsi_t *handle = dvbpsi_new(NULL, DVBPSI_MSG_DEBUG); // TODO
+			if(!handle) {
+				logger(LOG_CRIT, "dvbpsi_new() failed");
+				exit(EXIT_FAILURE); // TODO
+			}
 
+			// Keep track of installed PMT handlers
+			struct pmt_handle *pmt = g_slice_alloc(sizeof(struct pmt_handle));
+			pmt->handler = handle;
+			pmt->pmt_id = p_program->i_pid;
+			pmt->sid = p_program->i_number;
+			h->pmts = g_list_append(h->pmts, pmt);
+
+			if(!dvbpsi_pmt_attach(handle, p_program->i_number, pmt_handler, pmt)) {
+				logger(LOG_CRIT, "dvbpsi_pmt_attach() failed");
+				exit(EXIT_FAILURE); // TODO
+			}
+			pmt_handled[p_program->i_pid] = true;
+		}
+		p_program = p_program->p_next;
+	}
+	dvbpsi_pat_delete(pat);
+	return;
 }
 
 void *register_transponder(struct tune s) {
@@ -31,19 +87,9 @@ void *register_transponder(struct tune s) {
 		logger(LOG_CRIT, "dvbpsi_new() failed");
 		return NULL;
 	}
-	/*
-	h->pmt = dvbpsi_new(NULL, DVBPSI_MSG_DEBUG);
-	if(!h->pmt) {
-		logger(LOG_CRIT, "dvbpsi_new() failed");
-		dvbpsi_delete(h->pat);
-		return NULL;
-	}
-	*/
 	if(!dvbpsi_pat_attach(h->pat, pat_handler, NULL))  {
-//			!dvbpsi_pmt_attach(h->pmt, pmt_handler, NULL)) {
 		logger(LOG_CRIT, "Failed to attach libdvbpsi PAT decoder");
 		dvbpsi_delete(h->pat);
-		dvbpsi_delete(h->pmt);
 		return NULL;
 	}
 	return h;
