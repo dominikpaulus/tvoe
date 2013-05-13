@@ -3,10 +3,17 @@
 #include <event.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "http.h"
 
 const char *conffile = "./getstream.conf";
 int loglevel = 1;
+
+extern void yylex_destroy();
+extern void init_lexer();
+extern void init_parser();
+extern int yyparse(void);
 
 int main(int argc, char **argv) {
 	int c;
@@ -68,4 +75,6 @@ int main(int argc, char **argv) {
 	}
 
 	event_dispatch();
+
+	return EXIT_SUCCESS;
 }

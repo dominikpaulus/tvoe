@@ -11,6 +11,8 @@
 #include <glib-2.0/glib.h>
 #include <event.h>
 #include <errno.h>
+#include <string.h>
+#include <unistd.h>
 #include "frontend.h"
 #include "log.h"
 
@@ -25,7 +27,7 @@ struct tune_data {
 };
 
 static int get_frequency(int freq, struct lnb l) {
-
+	return 0; // TODO
 }
 
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
@@ -115,6 +117,9 @@ int acquire_frontend(struct tune s) {
 		goto fail;
 	}
 	fe->event = ev;
+
+	used_fe = g_list_append(used_fe, fe);
+
 	return 0;
 fail:
 	if(fe->fe_fd)

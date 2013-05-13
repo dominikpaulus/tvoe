@@ -9,6 +9,7 @@
 
 extern FILE *yyin;
 extern int yylineno;
+extern int yylex(void);
 
 void yyerror(const char *str)
 {
@@ -16,6 +17,7 @@ void yyerror(const char *str)
 	exit(EXIT_FAILURE);
 }
 
+/*
 static void parse_error(char *text, ...) 
 {
 	static char error[1024];
@@ -25,6 +27,7 @@ static void parse_error(char *text, ...)
 	va_end(args);
 	yyerror(error);
 }
+*/
 
 int yywrap()
 {
