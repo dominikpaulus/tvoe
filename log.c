@@ -3,7 +3,6 @@
 #include <stdio.h>
 
 int logger(int loglevel, char *fmt, ...) {
-	return 0;
 	char text[2048];
 	va_list args;
 	va_start(args, fmt);

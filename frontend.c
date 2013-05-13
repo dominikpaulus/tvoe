@@ -31,8 +31,15 @@ struct frontend {
 	int users;
 };
 
+/* Ripped from getstream-poempel */
 static int get_frequency(int freq, struct lnb l) {
-	return 1597000;
+	if(freq > 2200000) { /* Frequency contains l.osc.f. */
+		if(freq < l.slof)
+			return freq - l.lof1;
+		else
+			return freq - l.lof2;
+	} else
+		return freq;
 }
 
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
@@ -86,12 +93,12 @@ int acquire_frontend(struct tune s) {
 		struct dtv_property p[8];
 		struct dtv_properties cmds;
 		p[0].cmd = DTV_CLEAR;
-		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = SYS_DVBS2; // TODO
-		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = 22000 * 1000; //s.dvbs.symbol_rate;
+		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = s.dvbs.delivery_system;
+		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = s.dvbs.symbol_rate;
 		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = FEC_AUTO;
 		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
-		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = SEC_VOLTAGE_13; //TODO
+		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = s.dvbs.polarization ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18;
 		p[7].cmd = DTV_TUNE;				p[7].u.data = 0;
 		cmds.num = 8;
 		cmds.props = p;
