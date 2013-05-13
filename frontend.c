@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include "frontend.h"
 #include "log.h"
+#include "mpeg.h"
 
 static GList *idle_fe, *used_fe;
 
@@ -22,6 +23,7 @@ struct tune_data {
 	struct tune in;
 	struct lnb lnb;
 	struct event *event;
+	void *mpeg_handle;
 	int adapter, frontend;
 	int fe_fd, dmx_fd, dvr_fd;
 };
@@ -41,6 +43,7 @@ int acquire_frontend(struct tune s) {
 	idle_fe = g_list_remove(idle_fe, f->data);
 	struct tune_data *fe = (struct tune_data *) f->data;
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
+	fe->event = NULL;
 	fe->in = s;
 
 	char path[512];
@@ -118,10 +121,20 @@ int acquire_frontend(struct tune s) {
 	}
 	fe->event = ev;
 
+	fe->mpeg_handle = register_transponder(s);
+	if(!fe->mpeg_handle) {
+		logger(LOG_CRIT, "Initialization of MPEG handling module failed.");
+		goto fail;
+	}
+
 	used_fe = g_list_append(used_fe, fe);
 
 	return 0;
 fail:
+	if(fe->event) {
+		event_del(fe->event);
+		event_free(fe->event);
+	}
 	if(fe->fe_fd)
 		close(fe->fe_fd);
 	if(fe->dmx_fd)

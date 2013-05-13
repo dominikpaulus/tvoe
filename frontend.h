@@ -4,12 +4,13 @@
 struct tune {
 	unsigned int type;
 //	union {
-		struct {
-			unsigned int delivery_system;
-			unsigned int symbol_rate;
-			unsigned int frequency;
-			unsigned int voltage;
-		} dvbs;
+	struct {
+		unsigned int delivery_system;
+		unsigned int symbol_rate;
+		unsigned int frequency;
+		unsigned int voltage;
+	} dvbs;
+	unsigned int sid;
 //	};
 };
 
