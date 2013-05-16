@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h> // dvbpsi requires these... m(
 #include <stdlib.h>
 #include <dvbpsi/dvbpsi.h>
@@ -7,6 +8,7 @@
 #include <dvbpsi/descriptor.h>
 #include <dvbpsi/pmt.h>
 #include <glib.h>
+#include <assert.h>
 #include "mpeg.h"
 #include "log.h"
 
@@ -19,8 +21,14 @@ struct mpeg_handle {
 	GList *pmts;
 };
 
-static bool pmt_handled[0x2000];
-static int sid_map[0x2000];
+static bool pmt_handled[MAX_PID];
+static int sid_map[MAX_PID];
+// For keeping track of registered HTTP outputs
+struct callback {
+	void *ptr;
+	void (*cb) (struct evbuffer *, void *);
+};
+static GSList *callbacks[MAX_PID];
 
 /*
  * Process a new parsed PMT. Map PIDs to corresponding SIDs.
@@ -29,9 +37,6 @@ static int sid_map[0x2000];
 static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
 	logger(LOG_DEBUG, "New PMT found");
 }
-
-void (*callb) (struct evbuffer *, void *);
-void *callarg;
 
 /*
  * Process a new parsed PAT on input stream. Add PMT parsers for all referenced
@@ -93,10 +98,10 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		logger(LOG_NOTICE, "Unabligned MPEG-TS packets received, dropping.");
 		return;
 	}
-	struct evbuffer *tmp = evbuffer_new();
-	evbuffer_add(tmp, data, len);
-	callb(tmp, callarg);
-	evbuffer_free(tmp);
+	//struct evbuffer *tmp = evbuffer_new();
+	//evbuffer_add(tmp, data, len);
+	//callb(tmp, callarg);
+	//evbuffer_free(tmp);
 	for(i=0; i+188<len; i+=188) {
 		dvbpsi_packet_push(handle->pat, data+i);
 		GList *h = handle->pmts;
@@ -108,10 +113,18 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 	}
 }
 
-int register_client(int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
-	callb = cb;
-	callarg = ptr;
-	return 0;
+void register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
+	struct callback *scb = g_slice_alloc(sizeof(struct callback));
+	scb->cb = cb;
+	scb->ptr = ptr;
+	//g_hash_table_replace(callback, sid, s_slist_prepend(g_hash_table_lookup(callbacks, sid));
+	//callbacks[sid] = g_slist_prepend(callbacks[sid], scb);
+	return;
+}
+
+void unregister_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
+	struct callback scb = { cb, ptr };
+	//callbacks[sid] = g_slist_remove(callbacks[sid], &scb);
 }
 
 void *register_transponder(struct tune s) {
@@ -130,5 +143,9 @@ void *register_transponder(struct tune s) {
 }
 
 void unregister_transponder(void *handle) {
+	// TODO
+}
 
+void mpeg_init(void) {
+	//callbacks = g_hash_table_new(NULL, NULL);
 }

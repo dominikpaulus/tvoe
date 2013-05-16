@@ -44,6 +44,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	mpeg_init();
+
 	event_init();
 	httpd = evhttp_new(NULL);
 
