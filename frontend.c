@@ -51,6 +51,7 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 
 int subscribe_to_frontend(struct tune s) {
 	GList *it = used_fe;
+	logger(LOG_DEBUG, "Subscribing to frontend, freq: %d", s.dvbs.frequency);
 	// Check whether we have already tuned to this transponder
 	while(it) {
 		struct tune in = ((struct frontend *) it->data)->in;
@@ -59,10 +60,13 @@ int subscribe_to_frontend(struct tune s) {
 				in.dvbs.frequency == s.dvbs.frequency &&
 				in.dvbs.polarization == s.dvbs.polarization) {
 			((struct frontend *) it->data)->users++;
+			logger(LOG_DEBUG, "Frontend already known. New user count: %d",
+					((struct frontend *) it->data)->users);
 			return 0;
 		}
 		it = g_list_next(it);
 	}
+	logger(LOG_DEBUG, "Acquiring new frontend");
 	// We don't, acquire a new tuner
 	return acquire_frontend(s);
 }
@@ -160,6 +164,8 @@ int acquire_frontend(struct tune s) {
 	}
 
 	used_fe = g_list_append(used_fe, fe);
+
+	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
 
 	return 0;
 fail:

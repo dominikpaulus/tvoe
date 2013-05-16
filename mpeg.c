@@ -1,41 +1,80 @@
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h> // dvbpsi requires these... m(
+#include <stdbool.h>
 #include <stdlib.h>
-#include <dvbpsi/dvbpsi.h>
-#include <dvbpsi/psi.h>
-#include <dvbpsi/pat.h>
-#include <dvbpsi/descriptor.h>
-#include <dvbpsi/pmt.h>
+#include <bitstream/mpeg/ts.h>
+#include <bitstream/mpeg/psi.h>
+#include <bitstream/mpeg/psi/pmt_print.h>
 #include <glib.h>
 #include <assert.h>
 #include "mpeg.h"
 #include "log.h"
 
-struct pmt_handle {
-	dvbpsi_t *handler;
-	int pmt_id, sid;
-};
-struct mpeg_handle {
-	dvbpsi_t *pat;
-	GList *pmts;
-};
+/* 
+ * A lot of code in this file is based on biTstream examples.
+ * TODO: Licensing information.
+ */
 
-static bool pmt_handled[MAX_PID];
-static int sid_map[MAX_PID];
 // For keeping track of registered HTTP outputs
 struct callback {
 	void *ptr;
 	void (*cb) (struct evbuffer *, void *);
 };
-static GSList *callbacks[MAX_PID];
+struct pid_info {
+	int refcnt;
+	int8_t last_cc;
+	uint8_t *psi_buffer;
+	uint16_t psi_buffer_used;
+	uint8_t *current_pmt;
+	GSList *callback;
+};
+struct adapter {
+	PSI_TABLE_DECLARE(current_pat);
+	struct pid_info pids[MAX_PID];
+};
+
+/* Debugging help
+static void print(void *unused, const char *psz_format, ...) {
+	char psz_fmt[strlen(psz_format) + 2];
+	va_list args;
+	va_start(args, psz_format);
+	strcpy(psz_fmt, psz_format);
+	strcat(psz_fmt, "\n");
+	vprintf(psz_fmt, args);
+}
+*/
 
 /*
  * Process a new parsed PMT. Map PIDs to corresponding SIDs.
  * @param p Pointer to struct pmt_handle
  */
-static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
-	logger(LOG_DEBUG, "New PMT found");
+static void pmt_handler(struct adapter *a, uint16_t pid, uint8_t *section) {
+	//uint16_t sid = pmt_get_program(section);
+	int j;
+
+	if(!pmt_validate(section)) {
+		logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
+		return;
+	}
+
+	if(a->pids[pid].current_pmt &&
+			psi_compare(a->pids[pid].current_pmt, section)) {
+		free(section);
+		return;
+	}
+
+	logger(LOG_DEBUG, "New PMT for SID %d found", pid);
+
+	uint8_t *es;
+	for(j = 0; (es = pmt_get_es(section, j)); j++) {
+		//logger(LOG_DEBUG, "PID: %d", pmtn_get_pid(es));
+	}
+
+	free(a->pids[pid].current_pmt);
+	a->pids[pid].current_pmt = section;
+
+	// TODO: Add "pid" to PIDs for "sid"
+
+	//pmt_print(section, print, NULL, NULL, NULL, 123);
 }
 
 /*
@@ -43,109 +82,149 @@ static void pmt_handler(void *p, dvbpsi_pmt_t *pmt) {
  * channels, if necessary.
  * @param p Pointer to struct mpeg_handle
  */
-static void pat_handler(void *p, dvbpsi_pat_t *pat) {
-	logger(LOG_DEBUG, "New PAT found");
-	struct mpeg_handle *h = (struct mpeg_handle *) p;
-	dvbpsi_pat_program_t *p_program = pat->p_first_program;
-	// Iterate over PAT entries
-	while(p_program) {
-		logger(LOG_DEBUG, "PAT entry: Channel %d PMT is at PID %d", p_program->i_number, p_program->i_pid);
-		/*
-		 * PAT entries for PID 0 are special PIDs for NIT tables and other
-		 * stuff. We skip them for now, TODO: Handle and forward them
-		 * appropiately.
-		 */
-		if(p_program->i_number == 0) { // NIT and other stuff
-			p_program = p_program->p_next;
-			continue;
-		}
-		sid_map[p_program->i_pid] = p_program->i_number;
-		/*
-		 * Map PMT PID to corresponding SID. Add parser to handle PMTs for this
-		 * SID.
-		 */
-		if(!pmt_handled[p_program->i_pid]) {
-			dvbpsi_t *handle = dvbpsi_new(NULL, DVBPSI_MSG_DEBUG); // TODO
-			if(!handle) {
-				logger(LOG_CRIT, "dvbpsi_new() failed");
-				exit(EXIT_FAILURE); // TODO
-			}
+static void pat_handler(struct adapter *a, uint16_t pid, uint8_t *section) {
+	PSI_TABLE_DECLARE(new_pat);
+	uint8_t last_section;
+	int i;
 
-			// Keep track of installed PMT handlers
-			struct pmt_handle *pmt = g_slice_alloc(sizeof(struct pmt_handle));
-			pmt->handler = handle;
-			pmt->pmt_id = p_program->i_pid;
-			pmt->sid = p_program->i_number;
-			h->pmts = g_list_append(h->pmts, pmt);
-
-			if(!dvbpsi_pmt_attach(handle, p_program->i_number, pmt_handler, pmt)) {
-				logger(LOG_CRIT, "dvbpsi_pmt_attach() failed");
-				exit(EXIT_FAILURE); // TODO
-			}
-			pmt_handled[p_program->i_pid] = true;
-		}
-		p_program = p_program->p_next;
+	if(!pat_validate(section)) {
+		logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
+		return;
 	}
-	logger(LOG_DEBUG, "PAT parsing finished");
-	dvbpsi_pat_delete(pat);
+
+	psi_table_init(new_pat);
+	if(!psi_table_section(new_pat, section)) {
+		psi_table_free(new_pat);
+		return;
+	}
+	// Don't re-parse already known PATs
+	if(psi_table_validate(a->current_pat) &&
+			psi_table_compare(a->current_pat, new_pat)) {
+		psi_table_free(new_pat);
+	}
+
+	logger(LOG_DEBUG, "New PAT found");
+
+	last_section = psi_table_get_lastsection(new_pat);
+	for(i = 0; i <= last_section; i++) {
+		uint8_t *cur = psi_table_get_section(new_pat, i);
+		const uint8_t *program;
+		int j;
+
+		for(j = 0; (program = pat_get_program(cur, j)); j++) {
+			logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
+					patn_get_pid(program));
+		}
+	}
+
+	// TODO: Doesn't work, yet.
+	//psi_table_copy(a->current_pat, new_pat);
+	psi_table_free(new_pat);
+
 	return;
 }
 
+static void handle_section(struct adapter *a, uint16_t pid, uint8_t *section) {
+	uint8_t table_pid = psi_get_tableid(section);
+	if(!psi_validate(section)) {
+		logger(LOG_NOTICE, "Invalid section on PID %u\n", pid);
+	}
+	switch(table_pid) {
+		case PAT_TABLE_ID:
+			pat_handler(a, pid, section);
+			break;
+		case PMT_TABLE_ID:
+			pmt_handler(a, pid, section);
+			break;
+		default:
+			free(section);
+	}
+}
+
 void handle_input(void *ptr, unsigned char *data, size_t len) {
-	struct mpeg_handle *handle = (struct mpeg_handle *) ptr;
+	struct adapter *a = ptr;
 	int i;
-	if(len % 188) {
-		logger(LOG_NOTICE, "Unabligned MPEG-TS packets received, dropping.");
+	if(len % TS_SIZE) {
+		logger(LOG_NOTICE, "Unaligned MPEG-TS packets received, dropping.");
 		return;
 	}
-	//struct evbuffer *tmp = evbuffer_new();
-	//evbuffer_add(tmp, data, len);
-	//callb(tmp, callarg);
-	//evbuffer_free(tmp);
-	for(i=0; i+188<len; i+=188) {
-		dvbpsi_packet_push(handle->pat, data+i);
-		GList *h = handle->pmts;
-		while(h) {
-			struct pmt_handle *he = (struct pmt_handle *) h->data;
-			dvbpsi_packet_push(he->handler, data+i);
-			h = g_list_next(h);
+	for(i=0; i+TS_SIZE < len; i+=TS_SIZE) {
+		uint16_t pid = ts_get_pid(data + i);
+		uint8_t *cur = data + i;
+
+		if(pid == MAX_PID - 1)
+			continue;
+
+		// Mostly c&p from biTstream examples
+
+		if(ts_check_duplicate(ts_get_cc(cur), a->pids[i].last_cc) ||
+				!ts_has_payload(cur))
+			continue;
+		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[i].last_cc))
+			psi_assemble_reset(&a->pids[i].psi_buffer, &a->pids[i].psi_buffer_used);
+
+		const uint8_t *payload = ts_section(cur);
+		uint8_t length = data + TS_SIZE - payload;
+
+		if(!psi_assemble_empty(&a->pids[i].psi_buffer, &a->pids[i].psi_buffer_used)) {
+			uint8_t *section = psi_assemble_payload(&a->pids[i].psi_buffer,
+					&a->pids[i].psi_buffer_used, &payload, &length);
+			if(section)
+				handle_section(a, pid, section);
+		}
+
+		payload = ts_next_section(cur);
+		length = cur + TS_SIZE - payload;
+
+		while(length) {
+			uint8_t *section = psi_assemble_payload(&a->pids[i].psi_buffer,
+					&a->pids[i].psi_buffer_used, &payload, &length);
+			if(section)
+				handle_section(a, pid, section);
 		}
 	}
 }
 
 void register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
+	/*
 	struct callback *scb = g_slice_alloc(sizeof(struct callback));
 	scb->cb = cb;
 	scb->ptr = ptr;
+	*/
 	//g_hash_table_replace(callback, sid, s_slist_prepend(g_hash_table_lookup(callbacks, sid));
 	//callbacks[sid] = g_slist_prepend(callbacks[sid], scb);
 	return;
 }
 
 void unregister_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
-	struct callback scb = { cb, ptr };
+	//struct callback scb = { cb, ptr };
 	//callbacks[sid] = g_slist_remove(callbacks[sid], &scb);
 }
 
 void *register_transponder(struct tune s) {
-	struct mpeg_handle *h = g_slice_alloc0(sizeof(struct mpeg_handle));
-	h->pat = dvbpsi_new(NULL, DVBPSI_MSG_DEBUG);
-	if(!h->pat) {
-		logger(LOG_CRIT, "dvbpsi_new() failed");
-		return NULL;
+	struct adapter *h = g_slice_alloc(sizeof(struct adapter));
+	int i;
+	for(i = 0; i < MAX_PID; i++) {
+		h->pids[i].refcnt = 0;
+		h->pids[i].last_cc = -1;
+		h->pids[i].callback = NULL;
+		h->pids[i].current_pmt = NULL;
+		psi_assemble_init(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
 	}
-	if(!dvbpsi_pat_attach(h->pat, pat_handler, h))  {
-		logger(LOG_CRIT, "Failed to attach libdvbpsi PAT decoder");
-		dvbpsi_delete(h->pat);
-		return NULL;
-	}
+	psi_table_init(h->current_pat);
 	return h;
 }
 
 void unregister_transponder(void *handle) {
-	// TODO
+	struct adapter *h = handle;
+	int i;
+	for(i = 0; i < MAX_PID; i++) {
+		psi_assemble_reset(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
+	}
+	psi_table_free(h->current_pat);
+	g_slice_free1(sizeof(struct adapter), h);
 }
 
 void mpeg_init(void) {
-	//callbacks = g_hash_table_new(NULL, NULL);
+	// Nothing here
 }

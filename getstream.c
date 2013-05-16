@@ -44,8 +44,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	mpeg_init();
-
 	event_init();
 	httpd = evhttp_new(NULL);
 
@@ -77,7 +75,7 @@ int main(int argc, char **argv) {
 		freopen("/dev/null", "w", stderr);
 	}
 
-	struct tune s = { 5, { 6, 11347000, 22000 * 1000, true }, 28106 };
+	//struct tune s = { 5, { 6, 11347000, 22000 * 1000, true }, 28106 };
 	//printf("%d\n", subscribe_to_frontend(s));
 	//release_frontend(s);
 

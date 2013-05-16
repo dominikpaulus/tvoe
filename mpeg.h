@@ -7,7 +7,6 @@
 
 #define MAX_PID 0x1fff
 
-void mpeg_init();
 void *register_transponder(struct tune s);
 void unregister_transponder(void *handle);
 void register_client(unsigned int pid, void (*cb) (struct evbuffer *, void *), void *ptr);
