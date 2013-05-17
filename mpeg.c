@@ -31,6 +31,7 @@ struct pid_info {
 struct transponder {
 	PSI_TABLE_DECLARE(current_pat);
 	uint8_t pid0_cc;
+	uint16_t tsid, nitid;
 	struct pid_info pids[MAX_PID];
 };
 static GSList *clients, *transponders;
@@ -61,15 +62,14 @@ static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid,
 	evbuffer_free(ev);
 }
 
-static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid, uint16_t tsid) {
+static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
-	logger(LOG_DEBUG, "Sending PAT to client");
 
     // Generate empty PAT
     pat_init(pat);
     pat_set_length(pat, 0);
-    pat_set_tsid(pat, tsid);
+    pat_set_tsid(pat, a->tsid);
     psi_set_version(pat, 0);
     psi_set_current(pat);
     psi_set_section(pat, 0);
@@ -83,10 +83,14 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     psi_set_crc(pat);
     output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
 
-    // Add couple of programs to PAT
     psi_set_version(pat, 2);
     psi_set_current(pat);
     psi_set_length(pat, PSI_MAX_SIZE);
+
+    pat_n = pat_get_program(pat, j++);
+    patn_init(pat_n);
+    patn_set_program(pat_n, 0);
+    patn_set_pid(pat_n, a->nitid);
 
     pat_n = pat_get_program(pat, j++);
     patn_init(pat_n);
@@ -193,6 +197,8 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		const uint8_t *program;
 		int j;
 
+		a->tsid = pat_get_tsid(cur);
+
 		/* 
 		 * For every proram in this PAT, check whether we have clients
 		 * that request it. Add callbacks for them, if necessary.
@@ -201,13 +207,17 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 			GSList *it;
 			uint16_t cur_sid = patn_get_program(program);
 
+			if(cur_sid == 0)
+				a->nitid = patn_get_pid(program);
+
 			for(it = clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
-				if(c->sid != cur_sid)
+				if(c->sid != cur_sid && cur_sid != 0)
 					continue;
 
 				// Send new PAT to this client
-				send_pat(a, c, cur_sid, patn_get_pid(program), pat_get_tsid(cur));
+				if(cur_sid != 0)
+					send_pat(a, c, cur_sid, patn_get_pid(program));
 
 				/* Check whether callback for PMT is already installed */
 				GSList *it2;
@@ -253,15 +263,15 @@ static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section
 
 void handle_input(void *ptr, unsigned char *data, size_t len) {
 	struct transponder *a = ptr;
-	struct evbuffer *out = evbuffer_new();
+	struct evbuffer *out;
 
 	int i;
 	if(len % TS_SIZE) {
 		logger(LOG_NOTICE, "Unaligned MPEG-TS packets received, dropping.");
-		evbuffer_free(out);
 		return;
 	}
 
+	out = evbuffer_new();
 	for(i=0; i < len; i+=TS_SIZE) {
 		uint8_t *cur = data + i;
 		uint16_t pid = ts_get_pid(cur);
@@ -270,15 +280,6 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		if(pid >= MAX_PID - 1)
 			continue;
 
-		// Send packet to clients
-		//logger(LOG_DEBUG, "%d", pid);
-		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
-			struct client *c = it->data;
-			evbuffer_add(out, cur, TS_SIZE);
-			c->cb(out, c->ptr);
-			//logger(LOG_DEBUG, "Packet out");
-		}
-
 		// Mostly c&p from biTstream examples
 
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
@@ -286,6 +287,20 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 			continue;
 		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[pid].last_cc))
 			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
+
+		// Send packet to clients
+		//logger(LOG_DEBUG, "%d", pid);
+		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
+			//if(pid == 100)
+			//	logger(LOG_DEBUG, "PID %d CC: %d", pid, ts_get_cc(cur));
+			struct client *c = it->data;
+			evbuffer_add(out, cur, TS_SIZE);
+			c->cb(out, c->ptr);
+			//logger(LOG_DEBUG, "Packet out");
+		}
+	
+		//if(pid == 100)
+		//	logger(LOG_DEBUG, "Still there");
 
 		a->pids[pid].last_cc = ts_get_cc(cur);
 
