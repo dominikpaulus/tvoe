@@ -21,7 +21,6 @@ struct client {
 	void (*cb) (struct evbuffer *, void *);
 };
 struct pid_info {
-	int refcnt;
 	int8_t last_cc;
 	uint8_t *psi_buffer;
 	uint16_t psi_buffer_used;
@@ -30,23 +29,76 @@ struct pid_info {
 };
 struct transponder {
 	PSI_TABLE_DECLARE(current_pat);
+	uint8_t pid0_cc;
 	struct pid_info pids[MAX_PID];
 };
 static GSList *clients, *transponders;
 
-/* Debugging help
-static void print(void *unused, const char *psz_format, ...) {
-	char psz_fmt[strlen(psz_format) + 2];
-	va_list args;
-	va_start(args, psz_format);
-	strcpy(psz_fmt, psz_format);
-	strcat(psz_fmt, "\n");
-	vprintf(psz_fmt, args);
+static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
+    uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
+    uint16_t section_offset = 0;
+	struct evbuffer *ev = evbuffer_new();
+    do {
+        uint8_t ts[TS_SIZE];
+        uint8_t ts_offset = 0;
+        memset(ts, 0xff, TS_SIZE);
+
+        psi_split_section(ts, &ts_offset, section, &section_offset);
+
+        ts_set_pid(ts, pid);
+        ts_set_cc(ts, *cc);
+        (*cc)++;
+        *cc &= 0xf;
+
+        if (section_offset == section_length)
+            psi_split_end(ts, &ts_offset);
+
+
+		evbuffer_add(ev, ts, TS_SIZE);
+		c->cb(ev, c->ptr);
+    } while (section_offset < section_length);
+	evbuffer_free(ev);
 }
-*/
 
 static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
+	uint8_t *pat = psi_allocate();
+	uint8_t *pat_n, j = 0;
 
+    // Generate empty PAT
+    pat_init(pat);
+    pat_set_length(pat, 0);
+    //pat_set_tsid(pat, tsid);
+    psi_set_version(pat, 0);
+    psi_set_current(pat);
+    psi_set_section(pat, 0);
+    psi_set_lastsection(pat, 0);
+    psi_set_crc(pat);
+    output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
+
+    // Increase PAT version
+    psi_set_version(pat, 1);
+    psi_set_current(pat);
+    psi_set_crc(pat);
+    output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
+
+    // Add couple of programs to PAT
+    psi_set_version(pat, 2);
+    psi_set_current(pat);
+    psi_set_length(pat, PSI_MAX_SIZE);
+
+    pat_n = pat_get_program(pat, j++);
+    patn_init(pat_n);
+    patn_set_program(pat_n, sid);
+    patn_set_pid(pat_n, pid);
+
+    // Set correct PAT length
+    pat_n = pat_get_program(pat, j); // Get offset of the end of last program
+    pat_set_length(pat, pat_n - pat - PAT_HEADER_SIZE);
+    psi_set_crc(pat);
+
+	output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
+
+    free(pat);
 }
 
 /*
@@ -293,12 +345,12 @@ void *register_transponder(struct tune s) {
 	struct transponder *h = g_slice_alloc(sizeof(struct transponder));
 	int i;
 	for(i = 0; i < MAX_PID; i++) {
-		h->pids[i].refcnt = 0;
 		h->pids[i].last_cc = -1;
 		h->pids[i].callback = NULL;
 		h->pids[i].current_pmt = NULL;
 		psi_assemble_init(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
 	}
+	h->pid0_cc = -1;
 	psi_table_init(h->current_pat);
 	transponders = g_slist_prepend(transponders, h);
 	return h;
