@@ -11,8 +11,6 @@ struct output {
 };
 
 static void http_sendcb(struct evbuffer *buf, void *ptr) {
-	//logger(LOG_DEBUG, "Callback");
-	//logger(LOG_DEBUG, "%d", evbuffer_get_length(buf));
 	evhttp_send_reply_chunk(ptr, buf);
 }
 
@@ -32,9 +30,6 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 	}
 	register_client(c->t.sid, http_sendcb, req); // Never fails
 	evhttp_send_reply_start(req, 200, "OK");
-	struct evbuffer *foo = evbuffer_new();
-	evbuffer_add(foo, "asdf", 4);
-	evhttp_send_reply_chunk(req, foo);
 	evhttp_connection_set_closecb(evhttp_request_get_connection(req), http_closecb, ptr);
 }
 

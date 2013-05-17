@@ -16,7 +16,8 @@
 
 // For keeping track of registered HTTP outputs
 struct client {
-	int sid;
+	int sid, refcnt;
+	bool deleted;
 	void *ptr;
 	void (*cb) (struct evbuffer *, void *);
 };
@@ -60,14 +61,15 @@ static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid,
 	evbuffer_free(ev);
 }
 
-static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
+static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid, uint16_t tsid) {
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
+	logger(LOG_DEBUG, "Sending PAT to client");
 
     // Generate empty PAT
     pat_init(pat);
     pat_set_length(pat, 0);
-    //pat_set_tsid(pat, tsid);
+    pat_set_tsid(pat, tsid);
     psi_set_version(pat, 0);
     psi_set_current(pat);
     psi_set_section(pat, 0);
@@ -125,8 +127,10 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	*/
 
 	uint8_t *es;
+	// Loop over all elementary streams for this SID
 	for(j = 0; (es = pmt_get_es(section, j)); j++) {
 		GSList *it = a->pids[pid].callback; // PMT callbacks
+
 		// Register callbacks for all clients that subscribed to this
 		// program on all PIDs referenced by it
 		for(; it != NULL; it = g_slist_next(it)) {
@@ -147,8 +151,6 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	free(a->pids[pid].current_pmt);
 	a->pids[pid].current_pmt = section;
 
-	// TODO: Add "pid" to PIDs for "sid"
-
 	//pmt_print(section, print, NULL, NULL, NULL, 123);
 }
 
@@ -163,7 +165,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	int i;
 
 	if(!pat_validate(section)) {
-		logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
+		//logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
 		free(section);
 		return;
 	}
@@ -205,7 +207,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 					continue;
 
 				// Send new PAT to this client
-				send_pat(a, c, cur_sid, patn_get_pid(program));
+				send_pat(a, c, cur_sid, patn_get_pid(program), pat_get_tsid(cur));
 
 				/* Check whether callback for PMT is already installed */
 				GSList *it2;
@@ -233,7 +235,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section) {
 	uint8_t table_pid = psi_get_tableid(section);
 	if(!psi_validate(section)) {
-		logger(LOG_NOTICE, "Invalid section on PID %u\n", pid);
+		//logger(LOG_NOTICE, "Invalid section on PID %u\n", pid);
 		free(section);
 		return;
 	}
@@ -260,9 +262,9 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		return;
 	}
 
-	for(i=0; i+TS_SIZE < len; i+=TS_SIZE) {
-		uint16_t pid = ts_get_pid(data + i);
+	for(i=0; i < len; i+=TS_SIZE) {
 		uint8_t *cur = data + i;
+		uint16_t pid = ts_get_pid(cur);
 		GSList *it;
 
 		if(pid >= MAX_PID - 1)
@@ -279,20 +281,20 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 
 		// Mostly c&p from biTstream examples
 
-		if(ts_check_duplicate(ts_get_cc(cur), a->pids[i].last_cc) ||
+		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
 				!ts_has_payload(cur))
 			continue;
-		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[i].last_cc))
-			psi_assemble_reset(&a->pids[i].psi_buffer, &a->pids[i].psi_buffer_used);
+		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[pid].last_cc))
+			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
 
-		a->pids[i].last_cc = ts_get_cc(cur);
+		a->pids[pid].last_cc = ts_get_cc(cur);
 
 		const uint8_t *payload = ts_section(cur);
 		uint8_t length = data + TS_SIZE - payload;
 
-		if(!psi_assemble_empty(&a->pids[i].psi_buffer, &a->pids[i].psi_buffer_used)) {
-			uint8_t *section = psi_assemble_payload(&a->pids[i].psi_buffer,
-					&a->pids[i].psi_buffer_used, &payload, &length);
+		if(!psi_assemble_empty(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used)) {
+			uint8_t *section = psi_assemble_payload(&a->pids[pid].psi_buffer,
+					&a->pids[pid].psi_buffer_used, &payload, &length);
 			if(section)
 				handle_section(a, pid, section);
 		}
@@ -301,8 +303,8 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		length = cur + TS_SIZE - payload;
 
 		while(length) {
-			uint8_t *section = psi_assemble_payload(&a->pids[i].psi_buffer,
-					&a->pids[i].psi_buffer_used, &payload, &length);
+			uint8_t *section = psi_assemble_payload(&a->pids[pid].psi_buffer,
+					&a->pids[pid].psi_buffer_used, &payload, &length);
 			if(section)
 				handle_section(a, pid, section);
 		}
@@ -313,32 +315,19 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 
 void *register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
-	//GSList *it;
 	scb->cb = cb;
 	scb->ptr = ptr;
 	scb->sid = sid;
+	scb->refcnt = 0;
+	scb->deleted = false;
 	clients = g_slist_prepend(clients, scb);
-
-/*
-	for(it = transponders; it != NULL; it = g_slist_next(it)) {
-		struct transponder *a = it->data;
-		uint8_t *prog;
-
-		if(!psi_table_validate(a->current_pat) ||
-				!pat_table_find_program(a->current_pat, sid))
-			continue;
-		uint16_t i = patn_get_pid(pat_table_find_program(a->current_pat, sid));
-		a->pids[i].callback = g_slist_prepend(a->pids[i].callback, scb);
-		logger(LOG_DEBUG, "Assigned! PID: %d", i);
-	}
-*/
 	return scb;
 }
 
 void unregister_client(void *ptr) {
-
-	//struct callback scb = { cb, ptr };
-	//callbacks[sid] = g_slist_remove(callbacks[sid], &scb);
+	struct client *scb = ptr;
+	clients = g_slist_remove(clients, scb);
+	// TODO
 }
 
 void *register_transponder(struct tune s) {
