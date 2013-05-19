@@ -2,7 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-int logger(int loglevel, char *fmt, ...) {
+void logger(int loglevel, char *fmt, ...) {
 	char text[2048];
 	va_list args;
 	va_start(args, fmt);
