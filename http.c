@@ -18,6 +18,7 @@ static void http_closecb(struct evhttp_connection *req, void *ptr) {
 	struct output *c = (struct output *) ptr;
 	unregister_client(ptr);
 	release_frontend(c->t);
+	logger(LOG_DEBUG, "Dropping HTTP connection");
 }
 
 static void http_callback(struct evhttp_request *req, void *ptr) {
@@ -36,7 +37,7 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 void add_channel(const char *name, int sid, struct tune t) {
 	char text[128];
 	snprintf(text, 128, "/by-sid/%d", sid);
-	printf("New channel: %s, SID: %d, URL: %s, tune: ...\n", name, sid, text);
+	//printf("New channel: %s, SID: %d, URL: %s, tune: ...\n", name, sid, text);
 	struct output *ptr = g_slice_alloc(sizeof(struct output));
 	ptr->t = t;
 	evhttp_set_cb(httpd, text, http_callback, ptr);

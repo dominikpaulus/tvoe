@@ -345,7 +345,7 @@ void unregister_client(void *ptr) {
 	// TODO
 }
 
-void *register_transponder(struct tune s) {
+void *register_transponder(void) {
 	struct transponder *h = g_slice_alloc(sizeof(struct transponder));
 	int i;
 	for(i = 0; i < MAX_PID; i++) {

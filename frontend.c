@@ -22,16 +22,20 @@ static GList *idle_fe, *used_fe;
 static int acquire_frontend(struct tune s);
 
 struct frontend {
-	struct tune in;
-	struct lnb lnb;
-	struct event *event;
-	void *mpeg_handle;
-	int adapter, frontend;
-	int fe_fd, dmx_fd, dvr_fd;
-	int users;
+	struct tune in;		/**< Associated transponder, if applicable */
+	struct lnb lnb;		/**< Attached LNB */
+	int adapter;		/**< Adapter number */
+	int frontend;		/**< Frontend number */
+	int fe_fd;			/**< File descriptor for /dev/dvb/adapterX/frontendY (O_RDONLY) */
+	int dmx_fd;			/**< File descriptor for /dev/dvb/adapterX/demuxY (O_WRONLY) */
+	int dvr_fd;			/**< File descriptor for /dev/dvb/adapterX/dvrY (O_RDONLY) */
+	struct event *event;/**< Handle for the event callbacks on the dvr file handle */
+	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
+	int users;			/**< Current user refcount */
 };
 
-/* Ripped from getstream-poempel */
+/** Compute program frequency based on transponder frequency
+ * and LNB parameters. Ripped from getstream-poempel */
 static int get_frequency(int freq, struct lnb l) {
 	if(freq > 2200000) { /* Frequency contains l.osc.f. */
 		if(freq < l.slof)
@@ -42,6 +46,7 @@ static int get_frequency(int freq, struct lnb l) {
 		return freq;
 }
 
+/* libevent callback for data on dvr fd */
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
 	unsigned char buf[32 * 188];
@@ -71,6 +76,7 @@ int subscribe_to_frontend(struct tune s) {
 	return acquire_frontend(s);
 }
 
+/* Tune to a new, previously unknown transponder */
 int acquire_frontend(struct tune s) {
 	GList *f = g_list_first(idle_fe);
 	if(!f)
@@ -91,8 +97,10 @@ int acquire_frontend(struct tune s) {
 				fe->frontend, strerror(errno));
 		goto fail;
 	}
-	logger(LOG_DEBUG, "Successfully opened frontend %d/%d", fe->adapter, fe->frontend);
+	logger(LOG_DEBUG, "Successfully opened frontend %d/%d",
+			fe->adapter, fe->frontend);
 
+	/* Tune to transponder */
 	{
 		struct dtv_property p[8];
 		struct dtv_properties cmds;
@@ -121,6 +129,8 @@ int acquire_frontend(struct tune s) {
 		logger(LOG_CRIT, "Failed to open demuxer: %s", strerror(errno));
 		goto fail;
 	}
+
+	/* Initialize kernel demuxer */
 	{
 		struct dmx_pes_filter_params par;
 		par.pid = 0x2000;
@@ -139,6 +149,8 @@ int acquire_frontend(struct tune s) {
 			goto fail;
 		}
 	}
+
+	/* Open frontend output for reading */
 	logger(LOG_DEBUG, "Opening dvr interface");
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
 	fe->dvr_fd = open(path, O_RDONLY | O_NONBLOCK);
@@ -149,6 +161,7 @@ int acquire_frontend(struct tune s) {
 	}
 	logger(LOG_DEBUG, "Successfully opened frontend! :-)");
 
+	/* Add libevent callback for TS input */
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
 	struct timeval tv = { 30, 0 }; // 30s timeout
 	if(event_add(ev, &tv)) {
@@ -157,7 +170,8 @@ int acquire_frontend(struct tune s) {
 	}
 	fe->event = ev;
 
-	fe->mpeg_handle = register_transponder(s);
+	/* Register this transponder with the MPEG-TS handler */
+	fe->mpeg_handle = register_transponder();
 	if(!fe->mpeg_handle) {
 		logger(LOG_CRIT, "Initialization of MPEG handling module failed.");
 		goto fail;
@@ -222,8 +236,4 @@ void add_frontend(int adapter, int frontend, struct lnb l) {
 	fe->adapter = adapter;
 	fe->frontend = frontend;
 	idle_fe = g_list_append(idle_fe, fe);
-}
-
-void remove_frontend(int adapter, int frontend) {
-
 }
