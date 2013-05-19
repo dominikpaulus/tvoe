@@ -1,22 +1,30 @@
 cmake_minimum_required(VERSION 2.8)
+
+project(getstream-sh C)
+
+set(CMAKE_C_FLAGS "${CMAKE_ENABLE_C99} -Wall") 
+
 include(FindBISON)
 include(FindFLEX)
-
+include(FindPkgConfig)
 find_package(BISON)
 find_package(FLEX)
 
-find_path(GLIB_INCLUDE_DIR NAMES glib.h PATH_SUFFIXES glib-2.0)
+pkg_check_modules(GLIB REQUIRED glib-2.0)
+pkg_check_modules(EVENT REQUIRED libevent)
 
-BISON_TARGET(ConfigParser config_parser.y ${CMAKE_CURRENT_BINARY_DIR}/config_parser.c)
-FLEX_TARGET(ConfigLexer config_lexer.l ${CMAKE_CURRENT_BINARY_DIR}/config_lexer.c)
+BISON_TARGET(ConfigParser config_parser.y
+	${CMAKE_CURRENT_BINARY_DIR}/config_parser.c)
+FLEX_TARGET(ConfigLexer config_lexer.l
+	${CMAKE_CURRENT_BINARY_DIR}/config_lexer.c)
 ADD_FLEX_BISON_DEPENDENCY(ConfigLexer ConfigParser)
 
 INCLUDE_DIRECTORIES($(CMAKE_CURRENT_SOURCE_DIR)
-${CMAKE_CURRENT_BINARY_DIR},
-${GLIB_INCLUDE_DIR}
-/usr/lib/glib-2.0/include) # FIXME
+${CMAKE_CURRENT_BINARY_DIR}
+${GLIB_INCLUDE_DIRS})
 
-ADD_EXECUTABLE(getstream ${BISON_ConfigParser_OUTPUTS}
-	${FLEX_ConfigLexer_OUTPUTS} getstream.c http.c frontend.c log.c mpeg.c
-	channels.c)
-TARGET_LINK_LIBRARIES(getstream event glib-2.0) # TODO
+ADD_EXECUTABLE(getstream
+	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
+	getstream.c http.c frontend.c log.c mpeg.c channels.c)
+TARGET_LINK_LIBRARIES(getstream
+	${EVENT_LIBRARIES} ${GLIB_LIBRARIES})
