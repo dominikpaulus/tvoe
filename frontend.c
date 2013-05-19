@@ -46,6 +46,18 @@ static int get_frequency(int freq, struct lnb l) {
 		return freq;
 }
 
+static void fe_status_timer(evutil_socket_t fd, short int flags, void *arg) {
+	struct frontend *fe = arg;
+	logger(LOG_DEBUG, "Frontend callback");
+	fe_status_t status;
+	// Should never fail
+	ioctl(fe->fe_fd, FE_READ_STATUS, &status);
+	logger(LOG_DEBUG, "Frontend status: Signal %d, carrier %d, sync %d, lock %d",
+			status & FE_HAS_SIGNAL, status & FE_HAS_CARRIER,
+			status & FE_HAS_SYNC, status & FE_HAS_LOCK);
+	// TODO: Handle frontend timeout
+}
+
 /* libevent callback for data on dvr fd */
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
@@ -143,11 +155,14 @@ int acquire_frontend(struct tune s) {
 					fe->adapter, fe->frontend);
 			goto fail;
 		}
+		// We do DMX_IMMEDIATE_START, DMX_START shouldn't be necessary
+#if 0
 		if(ioctl(fe->dmx_fd, DMX_START) < 0) {
 			logger(LOG_CRIT, "Failed to enable tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
 			goto fail;
 		}
+#endif
 	}
 
 	/* Open frontend output for reading */
@@ -169,6 +184,10 @@ int acquire_frontend(struct tune s) {
 		goto fail;
 	}
 	fe->event = ev;
+	/* Add timer for callback checking frontend status */
+	ev = evtimer_new(NULL, fe_status_timer, fe);
+	tv.tv_sec = 3; tv.tv_usec = 0;
+	evtimer_add(ev, &tv);
 
 	/* Register this transponder with the MPEG-TS handler */
 	fe->mpeg_handle = register_transponder();
@@ -219,6 +238,8 @@ void release_frontend(struct tune s) {
 		logger(LOG_NOTICE, "release_frontend() on unknown tuner");
 		return;
 	}
+	logger(LOG_DEBUG, "Last user on frontend %d/%d exited, closing FE",
+			fe->adapter, fe->frontend);
 	// Last user on transponder removed, release frontend
 	event_del(fe->event);
 	event_free(fe->event);
