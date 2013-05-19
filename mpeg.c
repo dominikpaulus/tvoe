@@ -289,7 +289,6 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
 
 		// Send packet to clients
-		//logger(LOG_DEBUG, "%d", pid);
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
 			//if(pid == 100)
 			//	logger(LOG_DEBUG, "PID %d CC: %d", pid, ts_get_cc(cur));
@@ -336,13 +335,33 @@ void *register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), 
 	scb->refcnt = 0;
 	scb->deleted = false;
 	clients = g_slist_prepend(clients, scb);
+	for(GSList *it = transponders; it != NULL; it = g_slist_next(it)) {
+		struct transponder *t = it->data;
+		for(int i=0; i < MAX_PID; i++) {
+			if(t->pids[i].callback != NULL) {
+				logger(LOG_DEBUG, "Callback found for PID %d", i);
+			}
+		}
+	}
 	return scb;
 }
 
 void unregister_client(void *ptr) {
 	struct client *scb = ptr;
-	clients = g_slist_remove(clients, scb);
-	// TODO
+	clients = g_slist_remove_all(clients, scb);
+	logger(LOG_DEBUG, "Unregistering client");
+	scb->deleted = true;
+	/* 
+	 * Iterate over all callbacks and remove this client from them.
+	 * This is extremely expensive, however, disconnects should be
+	 * rather rare. This code should be optimized in the future.
+	 */
+	for(GSList *it = transponders; it != NULL; it = g_slist_next(it)) {
+		struct transponder *t = it->data;
+		for(int i=0; i < MAX_PID; i++)
+			t->pids[i].callback = g_slist_remove_all(t->pids[i].callback, scb);
+	}
+	g_slice_free1(sizeof(struct client), scb);
 }
 
 void *register_transponder(void) {

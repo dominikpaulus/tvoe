@@ -12,11 +12,12 @@ struct output {
 
 static void http_sendcb(struct evbuffer *buf, void *ptr) {
 	evhttp_send_reply_chunk(ptr, buf);
+	// TODO: Drop clients with large output buffers
 }
 
 static void http_closecb(struct evhttp_connection *req, void *ptr) {
 	struct output *c = (struct output *) ptr;
-	unregister_client(ptr);
+	unregister_client(c->handle);
 	release_frontend(c->t);
 	logger(LOG_DEBUG, "Dropping HTTP connection");
 }
@@ -29,7 +30,7 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 		evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
 		return;
 	}
-	register_client(c->t.sid, http_sendcb, req); // Never fails
+	c->handle = register_client(c->t.sid, http_sendcb, req); // Never fails
 	evhttp_send_reply_start(req, 200, "OK");
 	evhttp_connection_set_closecb(evhttp_request_get_connection(req), http_closecb, ptr);
 }
