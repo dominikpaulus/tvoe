@@ -36,7 +36,7 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 
 void add_channel(const char *name, int sid, struct tune t) {
 	char text[128];
-	snprintf(text, 128, "/by-sid/%d", sid);
+	snprintf(text, sizeof(text), "/by-sid/%d", sid);
 	//printf("New channel: %s, SID: %d, URL: %s, tune: ...\n", name, sid, text);
 	struct output *ptr = g_slice_alloc(sizeof(struct output));
 	ptr->t = t;
