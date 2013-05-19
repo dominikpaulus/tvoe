@@ -5,7 +5,9 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include "http.h"
+#include "log.h"
 
 const char *conffile = "./getstream.conf";
 int loglevel = 1;
@@ -76,7 +78,18 @@ int main(int argc, char **argv) {
 		freopen("/dev/null", "w", stderr);
 	}
 
+	/* Ignore SIGPIPE */
+	{
+		struct sigaction action;
+		sigemptyset(&action.sa_mask);
+		action.sa_flags = SA_RESTART;
+		action.sa_handler = SIG_IGN;
+		sigaction(SIGPIPE, &action, NULL);
+	}
+
 	event_dispatch();
+
+	logger(LOG_CRIT, "Event loop exited");
 
 	return EXIT_SUCCESS;
 }
