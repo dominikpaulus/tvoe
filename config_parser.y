@@ -17,7 +17,7 @@ extern int yylex(void);
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
-static int adapter;
+static int adapter = -1;
 
 void yyerror(const char *str)
 {
@@ -78,7 +78,7 @@ channels: CHANNELSCONF STRING {
 }
 
 frontend: FRONTEND '{' frontendoptions '}' {
-	if(!adapter)
+	if(adapter == -1)
 		parse_error("frontend block needs an adapter number");
 	/* Default Universal LNB */
 	if(!l.lof1)
@@ -88,7 +88,7 @@ frontend: FRONTEND '{' frontendoptions '}' {
 	if(!l.slof)
 		l.slof = 11700000;
 	add_frontend(adapter, 0, l);
-		
+	adapter = -1;
 }
 frontendoptions: | frontendoptions frontendoption;
 frontendoption: adapter | lof1 | lof2 | slof;

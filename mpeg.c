@@ -17,6 +17,7 @@
 // For keeping track of registered HTTP outputs
 struct client {
 	int sid, refcnt;
+	uint8_t pid0_cc;
 	bool deleted;
 	void *ptr;
 	void (*cb) (struct evbuffer *, void *);
@@ -29,8 +30,6 @@ struct pid_info {
 	GSList *callback;
 };
 struct transponder {
-	PSI_TABLE_DECLARE(current_pat);
-	uint8_t pid0_cc;
 	uint16_t tsid, nitid;
 	struct pid_info pids[MAX_PID];
 };
@@ -66,31 +65,13 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
 
-    // Generate empty PAT
     pat_init(pat);
-    pat_set_length(pat, 0);
     pat_set_tsid(pat, a->tsid);
-    psi_set_version(pat, 0);
-    psi_set_current(pat);
     psi_set_section(pat, 0);
     psi_set_lastsection(pat, 0);
-    psi_set_crc(pat);
-    output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
-
-    // Increase PAT version
-    psi_set_version(pat, 1);
-    psi_set_current(pat);
-    psi_set_crc(pat);
-    output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
-
     psi_set_version(pat, 2);
     psi_set_current(pat);
     psi_set_length(pat, PSI_MAX_SIZE);
-
-    pat_n = pat_get_program(pat, j++);
-    patn_init(pat_n);
-    patn_set_program(pat_n, 0);
-    patn_set_pid(pat_n, a->nitid);
 
     pat_n = pat_get_program(pat, j++);
     patn_init(pat_n);
@@ -102,7 +83,7 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     pat_set_length(pat, pat_n - pat - PAT_HEADER_SIZE);
     psi_set_crc(pat);
 
-	output_psi_section(c, pat, PAT_PID, &a->pid0_cc);
+	output_psi_section(c, pat, PAT_PID, &c->pid0_cc);
 
     free(pat);
 }
@@ -228,6 +209,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				}
 				if(it2) // Callback already registered
 					continue;
+				logger(LOG_DEBUG, "Adding PMT callback");
 				a->pids[patn_get_pid(program)].callback =
 					g_slist_prepend(a->pids[patn_get_pid(program)].callback, c);
 			}
@@ -236,8 +218,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		}
 	}
 
-	psi_table_free(a->current_pat);
-	psi_table_copy(a->current_pat, new_pat);
+	psi_table_free(new_pat);
 
 	return;
 }
@@ -334,21 +315,14 @@ void *register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), 
 	scb->sid = sid;
 	scb->refcnt = 0;
 	scb->deleted = false;
+	scb->pid0_cc = 0;
 	clients = g_slist_prepend(clients, scb);
-	for(GSList *it = transponders; it != NULL; it = g_slist_next(it)) {
-		struct transponder *t = it->data;
-		for(int i=0; i < MAX_PID; i++) {
-			if(t->pids[i].callback != NULL) {
-				logger(LOG_DEBUG, "Callback found for PID %d", i);
-			}
-		}
-	}
 	return scb;
 }
 
 void unregister_client(void *ptr) {
 	struct client *scb = ptr;
-	clients = g_slist_remove_all(clients, scb);
+	clients = g_slist_remove(clients, scb);
 	logger(LOG_DEBUG, "Unregistering client");
 	scb->deleted = true;
 	/* 
@@ -359,7 +333,7 @@ void unregister_client(void *ptr) {
 	for(GSList *it = transponders; it != NULL; it = g_slist_next(it)) {
 		struct transponder *t = it->data;
 		for(int i=0; i < MAX_PID; i++)
-			t->pids[i].callback = g_slist_remove_all(t->pids[i].callback, scb);
+			t->pids[i].callback = g_slist_remove(t->pids[i].callback, scb);
 	}
 	g_slice_free1(sizeof(struct client), scb);
 }
@@ -368,24 +342,23 @@ void *register_transponder(void) {
 	struct transponder *h = g_slice_alloc(sizeof(struct transponder));
 	int i;
 	for(i = 0; i < MAX_PID; i++) {
-		h->pids[i].last_cc = -1;
+		h->pids[i].last_cc = 0;
 		h->pids[i].callback = NULL;
 		h->pids[i].current_pmt = NULL;
 		psi_assemble_init(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
 	}
-	h->pid0_cc = -1;
-	psi_table_init(h->current_pat);
 	transponders = g_slist_prepend(transponders, h);
 	return h;
 }
 
 void unregister_transponder(void *handle) {
+	logger(LOG_DEBUG, "Unregister_transponder()");
 	struct transponder *h = handle;
-	int i;
-	for(i = 0; i < MAX_PID; i++) {
+	for(int i = 0; i < MAX_PID; i++) {
+		if(h->pids[i].current_pmt)
+			free(h->pids[i].current_pmt);
 		psi_assemble_reset(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
 	}
-	psi_table_free(h->current_pat);
 	transponders = g_slist_remove(transponders, h);
 	g_slice_free1(sizeof(struct transponder), h);
 }

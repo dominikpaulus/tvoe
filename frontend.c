@@ -61,8 +61,13 @@ static void fe_status_timer(evutil_socket_t fd, short int flags, void *arg) {
 /* libevent callback for data on dvr fd */
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
-	unsigned char buf[32 * 188];
+	unsigned char buf[1024 * 188];
 	int n = read(fd, buf, sizeof(buf));
+	if(n < 0) {
+		logger(LOG_CRIT, "Invalid read on frontend: %s",
+				strerror(errno));
+		return;
+	}
 	handle_input(fe->mpeg_handle, buf, n);
 }
 
