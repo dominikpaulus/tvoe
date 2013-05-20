@@ -19,7 +19,8 @@ int init_lexer(void)
 
 %%
 
-\"[^"\n]+[\"\n]		yytext[yyleng-1] = 0; yylval.text = yytext+1; return STRING;
+\"[^"\n]+[\"\n]	yytext[yyleng-1] = 0; yylval.text = yytext+1; return STRING;
+yes|no			yylval.num=!strcmp(yytext,"yes"); return YESNO;
 [0-9]+			yylval.num=atoi(yytext); return NUMBER;
 
 http-listen	return HTTPLISTEN;
@@ -29,6 +30,9 @@ lof1		return LOF1;
 lof2		return LOF2;
 slof		return SLOF;
 channels	return CHANNELSCONF;
+logfile		return LOGFILE;
+use_syslog	return USESYSLOG;
+loglevel	return LOGLEVEL;
 
 ;			return SEMICOLON;
 [ \t\r\n]+		;

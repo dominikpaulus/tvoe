@@ -10,7 +10,8 @@
 #include "log.h"
 
 const char *conffile = "./getstream.conf";
-int loglevel = 1;
+extern int loglevel;
+bool daemonize = true;
 
 extern void yylex_destroy();
 extern void init_lexer();
@@ -19,15 +20,11 @@ extern int yyparse(void);
 
 int main(int argc, char **argv) {
 	int c;
-	bool daemonize = true;
 
 	printf("getstream-sh version %s compiled on %s %s\n", "0.1", __DATE__, __TIME__);
 
 	while((c = getopt(argc, argv, "hfd:c:")) != -1) {
 		switch(c) {
-			case 'd': // Debug level
-				loglevel = atoi(optarg);
-				break;
 			case 'c': // Config filename
 				conffile = optarg;
 				break;
@@ -36,9 +33,8 @@ int main(int argc, char **argv) {
 				break;
 			case 'h':
 			default:
-				fprintf(stderr, "Usage: %s [-c config] [-d loglevel] [-f] [-h]\n"
+				fprintf(stderr, "Usage: %s [-c config] [-f] [-h]\n"
 						"\t-c: Sets configuration file path. Default: ./getstream.conf\n"
-						"\t-d: Set debug level (1-10)\n"
 						"\t-f: Disable daemon fork\n"
 						"\t-h: Show this help\n", argv[0]);
 				exit(EXIT_FAILURE);
@@ -54,6 +50,9 @@ int main(int argc, char **argv) {
 	init_parser();
 	yyparse();
 	yylex_destroy();
+
+	/* Initialize logging subsystem */
+	init_log();
 
 	// Daemonize if necessary
 	if(daemonize && getppid() != 1) {
@@ -89,7 +88,7 @@ int main(int argc, char **argv) {
 
 	event_dispatch();
 
-	logger(LOG_CRIT, "Event loop exited");
+	logger(LOG_ERR, "Event loop exited");
 
 	return EXIT_SUCCESS;
 }

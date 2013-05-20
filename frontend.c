@@ -53,7 +53,7 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	unsigned char buf[1024 * 188];
 	int n = read(fd, buf, sizeof(buf));
 	if(n < 0) {
-		logger(LOG_CRIT, "Invalid read on frontend: %s",
+		logger(LOG_ERR, "Invalid read on frontend: %s",
 				strerror(errno));
 		return;
 	}
@@ -104,7 +104,7 @@ static void *tune_to_fe(void *arg) {
 		cmds.num = 8;
 		cmds.props = p;
 		if(ioctl(fe->fe_fd, FE_SET_PROPERTY, &cmds) < 0) {
-			logger(LOG_CRIT, "Failed to tune frontend %d/%d to freq %d, sym	%d",
+			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
 			// TODO
@@ -115,13 +115,13 @@ static void *tune_to_fe(void *arg) {
 	struct dvb_frontend_event ev;
 	do {
 		if(ioctl(fe->fe_fd, FE_GET_EVENT, &ev) < 0) {
-			logger(LOG_CRIT, "Failed to get event from frontend %d/%d: %s",
+			logger(LOG_ERR, "Failed to get event from frontend %d/%d: %s",
 					fe->adapter, fe->frontend, strerror(errno));
 			// TODO
 		}
 	} while(!(ev.status & FE_HAS_LOCK) && !(ev.status & FE_TIMEDOUT));
 	if(ev.status & FE_TIMEDOUT) {
-		logger(LOG_CRIT, "Timed out waiting for lock on frontend %d/%d",
+		logger(LOG_ERR, "Timed out waiting for lock on frontend %d/%d",
 				fe->adapter, fe->frontend);
 		// TODO
 	}
@@ -135,7 +135,7 @@ static void *tune_to_fe(void *arg) {
 		par.pes_type = DMX_PES_OTHER;
 		par.flags = DMX_IMMEDIATE_START;
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
-			logger(LOG_CRIT, "Failed to configure tmuxer on frontend %d/%d",
+			logger(LOG_ERR, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
 			// TODO
 	//		goto fail;
@@ -165,7 +165,7 @@ int acquire_frontend(struct tune s) {
 			fe->frontend);
 	fe->fe_fd = open(path, O_RDWR);
 	if(fe->fe_fd < 0) {
-		logger(LOG_CRIT, "Failed to open frontend (%d/%d): %s", fe->adapter,
+		logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
 				fe->frontend, strerror(errno));
 		goto fail;
 	}
@@ -174,7 +174,7 @@ int acquire_frontend(struct tune s) {
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/demux%d", fe->adapter, fe->frontend);
 	fe->dmx_fd = open(path, O_RDWR);
 	if(fe->dmx_fd < 0) {
-		logger(LOG_CRIT, "Failed to open demuxer: %s", strerror(errno));
+		logger(LOG_ERR, "Failed to open demuxer: %s", strerror(errno));
 		goto fail;
 	}
 
@@ -182,7 +182,7 @@ int acquire_frontend(struct tune s) {
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
 	fe->dvr_fd = open(path, O_RDONLY | O_NONBLOCK);
 	if(!fe->dvr_fd) {
-		logger(LOG_CRIT, "Failed to open dvr device for frontend %d/%d",
+		logger(LOG_ERR, "Failed to open dvr device for frontend %d/%d",
 				fe->adapter, fe->frontend);
 		goto fail;
 	}
@@ -191,7 +191,7 @@ int acquire_frontend(struct tune s) {
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
 	struct timeval tv = { 30, 0 }; // 30s timeout
 	if(event_add(ev, &tv)) {
-		logger(LOG_CRIT, "Adding frontend to libevent failed.");
+		logger(LOG_ERR, "Adding frontend to libevent failed.");
 		goto fail;
 	}
 	fe->event = ev;
@@ -199,7 +199,7 @@ int acquire_frontend(struct tune s) {
 	/* Register this transponder with the MPEG-TS handler */
 	fe->mpeg_handle = register_transponder();
 	if(!fe->mpeg_handle) {
-		logger(LOG_CRIT, "Initialization of MPEG handling module failed.");
+		logger(LOG_ERR, "Initialization of MPEG handling module failed.");
 		goto fail;
 	}
 
@@ -208,7 +208,7 @@ int acquire_frontend(struct tune s) {
 	/* Start tuning thread */
 	if((errno = pthread_create(&fe->thread, NULL, tune_to_fe,
 					fe)) < 0) {
-		logger(LOG_CRIT, "pthread_create() failed: %s", strerror(errno));
+		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
 		goto fail;
 	}
 

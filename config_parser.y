@@ -14,6 +14,9 @@
 extern FILE *yyin;
 extern int yylineno;
 extern int yylex(void);
+extern char *logfile;
+extern int use_syslog;
+extern int loglevel;
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
@@ -54,13 +57,32 @@ void init_parser() {
 
 %token<text> STRING
 %token<num> NUMBER
+%token<num> YESNO
 %token SEMICOLON HTTPLISTEN FRONTEND ADAPTER LOF1 LOF2 SLOF CHANNELSCONF
+%token LOGFILE USESYSLOG LOGLEVEL
 
 %%
 
 statements: 
 		    | statements statement SEMICOLON;
-statement: http | frontend | channels;
+statement: http | frontend | channels | logfile | syslog | loglevel;
+
+loglevel: LOGLEVEL NUMBER {
+	loglevel = $2;
+	if(loglevel < 0 || loglevel > 5) {
+		parse_error("Loglevel must be between 0 and 5.");
+		exit(EXIT_FAILURE);
+	}
+}
+
+
+logfile: LOGFILE STRING {
+	logfile = strdup($2);
+}
+
+syslog: USESYSLOG YESNO {
+	use_syslog = $2;
+}
 
 http: HTTPLISTEN NUMBER {
 	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(httpd, "::", $2);
