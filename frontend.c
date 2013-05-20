@@ -32,6 +32,7 @@ struct frontend {
 	struct event *event;/**< Handle for the event callbacks on the dvr file handle */
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
 	int users;			/**< Current user refcount */
+	pthread_t thread;	/**< Handle for tuning thread */
 };
 
 /** Compute program frequency based on transponder frequency
@@ -44,18 +45,6 @@ static int get_frequency(int freq, struct lnb l) {
 			return freq - l.lof2;
 	} else
 		return freq;
-}
-
-static void fe_status_timer(evutil_socket_t fd, short int flags, void *arg) {
-	struct frontend *fe = arg;
-	logger(LOG_DEBUG, "Frontend callback");
-	fe_status_t status;
-	// Should never fail
-	ioctl(fe->fe_fd, FE_READ_STATUS, &status);
-	logger(LOG_DEBUG, "Frontend status: Signal %d, carrier %d, sync %d, lock %d",
-			status & FE_HAS_SIGNAL, status & FE_HAS_CARRIER,
-			status & FE_HAS_SYNC, status & FE_HAS_LOCK);
-	// TODO: Handle frontend timeout
 }
 
 /* libevent callback for data on dvr fd */
@@ -93,30 +82,13 @@ int subscribe_to_frontend(struct tune s) {
 	return acquire_frontend(s);
 }
 
-/* Tune to a new, previously unknown transponder */
-int acquire_frontend(struct tune s) {
-	GList *f = g_list_first(idle_fe);
-	if(!f)
-		return -1;
-	struct frontend *fe = (struct frontend *) (f->data);
-	idle_fe = g_list_remove(idle_fe, f->data);
-	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
-	fe->event = NULL;
-	fe->in = s;
-	fe->users = 1;
-
-	char path[512];
-	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
-			fe->frontend);
-	fe->fe_fd = open(path, O_RDWR);
-	if(fe->fe_fd < 0) {
-		logger(LOG_CRIT, "Failed to open frontend (%d/%d): %s", fe->adapter,
-				fe->frontend, strerror(errno));
-		goto fail;
-	}
-	logger(LOG_DEBUG, "Successfully opened frontend %d/%d",
-			fe->adapter, fe->frontend);
-
+/*
+ * Thread handling FE parameter setting
+ */
+static void *tune_to_fe(void *arg) {
+	pthread_detach(pthread_self());
+	struct frontend *fe = arg;
+	struct tune s = fe->in;
 	/* Tune to transponder */
 	{
 		struct dtv_property p[8];
@@ -135,19 +107,26 @@ int acquire_frontend(struct tune s) {
 			logger(LOG_CRIT, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
-			goto fail;
+			// TODO
+	//		goto fail;
 		}
 	}
-	logger(LOG_DEBUG, "Tuning succeeded");
-	logger(LOG_DEBUG, "Setting demuxer to budget mode");
-	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/demux%d", fe->adapter, fe->frontend);
-	fe->dmx_fd = open(path, O_RDWR);
-	if(fe->dmx_fd < 0) {
-		logger(LOG_CRIT, "Failed to open demuxer: %s", strerror(errno));
-		goto fail;
+	/* Now wait for the tuning to be successful */
+	struct dvb_frontend_event ev;
+	do {
+		if(ioctl(fe->fe_fd, FE_GET_EVENT, &ev) < 0) {
+			logger(LOG_CRIT, "Failed to get event from frontend %d/%d: %s",
+					fe->adapter, fe->frontend, strerror(errno));
+			// TODO
+		}
+	} while(!(ev.status & FE_HAS_LOCK) && !(ev.status & FE_TIMEDOUT));
+	if(ev.status & FE_TIMEDOUT) {
+		logger(LOG_CRIT, "Timed out waiting for lock on frontend %d/%d",
+				fe->adapter, fe->frontend);
+		// TODO
 	}
-
-	/* Initialize kernel demuxer */
+	logger(LOG_INFO, "Tuning on adapter %d/%d succeeded",
+			fe->adapter, fe->frontend);
 	{
 		struct dmx_pes_filter_params par;
 		par.pid = 0x2000;
@@ -158,20 +137,48 @@ int acquire_frontend(struct tune s) {
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
 			logger(LOG_CRIT, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
-			goto fail;
+			// TODO
+	//		goto fail;
 		}
-		// We do DMX_IMMEDIATE_START, DMX_START shouldn't be necessary
-#if 0
-		if(ioctl(fe->dmx_fd, DMX_START) < 0) {
-			logger(LOG_CRIT, "Failed to enable tmuxer on frontend %d/%d",
-					fe->adapter, fe->frontend);
-			goto fail;
-		}
-#endif
+	}
+	return NULL;
+}
+
+/* Tune to a new, previously unknown transponder */
+int acquire_frontend(struct tune s) {
+	GList *f = g_list_first(idle_fe);
+	if(!f)
+		return -1;
+	struct frontend *fe = (struct frontend *) (f->data);
+	idle_fe = g_list_remove(idle_fe, f->data);
+	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
+	fe->event = NULL;
+	fe->in = s;
+	fe->users = 1;
+
+	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
+			fe->adapter, fe->frontend);
+
+	char path[512];
+	/* Open frontend... */
+	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
+			fe->frontend);
+	fe->fe_fd = open(path, O_RDWR);
+	if(fe->fe_fd < 0) {
+		logger(LOG_CRIT, "Failed to open frontend (%d/%d): %s", fe->adapter,
+				fe->frontend, strerror(errno));
+		goto fail;
 	}
 
-	/* Open frontend output for reading */
-	logger(LOG_DEBUG, "Opening dvr interface");
+	/* ...demuxer... */
+	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/demux%d", fe->adapter, fe->frontend);
+	fe->dmx_fd = open(path, O_RDWR);
+	if(fe->dmx_fd < 0) {
+		logger(LOG_CRIT, "Failed to open demuxer: %s", strerror(errno));
+		goto fail;
+	}
+
+	/* ...and dvr.*/
 	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
 	fe->dvr_fd = open(path, O_RDONLY | O_NONBLOCK);
 	if(!fe->dvr_fd) {
@@ -179,7 +186,6 @@ int acquire_frontend(struct tune s) {
 				fe->adapter, fe->frontend);
 		goto fail;
 	}
-	logger(LOG_DEBUG, "Successfully opened frontend! :-)");
 
 	/* Add libevent callback for TS input */
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
@@ -189,10 +195,6 @@ int acquire_frontend(struct tune s) {
 		goto fail;
 	}
 	fe->event = ev;
-	/* Add timer for callback checking frontend status */
-	ev = evtimer_new(NULL, fe_status_timer, fe);
-	tv.tv_sec = 3; tv.tv_usec = 0;
-	evtimer_add(ev, &tv);
 
 	/* Register this transponder with the MPEG-TS handler */
 	fe->mpeg_handle = register_transponder();
@@ -202,6 +204,13 @@ int acquire_frontend(struct tune s) {
 	}
 
 	used_fe = g_list_append(used_fe, fe);
+
+	/* Start tuning thread */
+	if((errno = pthread_create(&fe->thread, NULL, tune_to_fe,
+					fe)) < 0) {
+		logger(LOG_CRIT, "pthread_create() failed: %s", strerror(errno));
+		goto fail;
+	}
 
 	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
 

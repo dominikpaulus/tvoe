@@ -209,7 +209,6 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				}
 				if(it2) // Callback already registered
 					continue;
-				logger(LOG_DEBUG, "Adding PMT callback");
 				a->pids[patn_get_pid(program)].callback =
 					g_slist_prepend(a->pids[patn_get_pid(program)].callback, c);
 			}

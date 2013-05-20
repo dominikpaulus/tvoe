@@ -9,6 +9,7 @@ include(FindFLEX)
 include(FindPkgConfig)
 find_package(BISON)
 find_package(FLEX)
+find_package(Threads)
 
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 pkg_check_modules(EVENT REQUIRED libevent)
@@ -27,4 +28,5 @@ ADD_EXECUTABLE(getstream
 	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
 	getstream.c http.c frontend.c log.c mpeg.c channels.c)
 TARGET_LINK_LIBRARIES(getstream
-	${EVENT_LIBRARIES} ${GLIB_LIBRARIES})
+	${EVENT_LIBRARIES} ${GLIB_LIBRARIES}
+	${CMAKE_THREAD_LIBS_INIT})
