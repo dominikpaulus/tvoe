@@ -97,7 +97,7 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	int j;
 
 	if(!pmt_validate(section)) {
-		logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
+		//logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
 		free(section);
 		return;
 	}

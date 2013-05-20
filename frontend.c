@@ -89,6 +89,9 @@ static void *tune_to_fe(void *arg) {
 	pthread_detach(pthread_self());
 	struct frontend *fe = arg;
 	struct tune s = fe->in;
+	// TODO: Proper error handling for this function. At the moment, we just return
+	// leaving this frontend idle - eventually, all clients will drop and we will
+	// release this frontend...
 	/* Tune to transponder */
 	{
 		struct dtv_property p[9];
@@ -106,11 +109,12 @@ static void *tune_to_fe(void *arg) {
 		cmds.num = 9;
 		cmds.props = p;
 		if(ioctl(fe->fe_fd, FE_SET_PROPERTY, &cmds) < 0) {
+			// This should only fail if we get an event overflow, thus,
+			// we can safely continue after this error.
 			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
-			// TODO
-	//		goto fail;
+			return NULL; // TODO
 		}
 	}
 	/* Now wait for the tuning to be successful */
@@ -119,13 +123,12 @@ static void *tune_to_fe(void *arg) {
 		if(ioctl(fe->fe_fd, FE_GET_EVENT, &ev) < 0) {
 			logger(LOG_ERR, "Failed to get event from frontend %d/%d: %s",
 					fe->adapter, fe->frontend, strerror(errno));
-			// TODO
 		}
 	} while(!(ev.status & FE_HAS_LOCK) && !(ev.status & FE_TIMEDOUT));
 	if(ev.status & FE_TIMEDOUT) {
 		logger(LOG_ERR, "Timed out waiting for lock on frontend %d/%d",
 				fe->adapter, fe->frontend);
-		// TODO
+		return NULL;
 	}
 	logger(LOG_INFO, "Tuning on adapter %d/%d succeeded",
 			fe->adapter, fe->frontend);
@@ -139,8 +142,7 @@ static void *tune_to_fe(void *arg) {
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
 			logger(LOG_ERR, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
-			// TODO
-	//		goto fail;
+			return NULL;
 		}
 	}
 	return NULL;
