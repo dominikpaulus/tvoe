@@ -91,8 +91,9 @@ static void *tune_to_fe(void *arg) {
 	struct tune s = fe->in;
 	/* Tune to transponder */
 	{
-		struct dtv_property p[8];
+		struct dtv_property p[9];
 		struct dtv_properties cmds;
+		bool tone = s.dvbs.frequency > 2200000 && s.dvbs.frequency >= fe->lnb.slof;
 		p[0].cmd = DTV_CLEAR;
 		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = s.dvbs.delivery_system;
 		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = s.dvbs.symbol_rate;
@@ -100,8 +101,9 @@ static void *tune_to_fe(void *arg) {
 		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
 		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = s.dvbs.polarization ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13;
-		p[7].cmd = DTV_TUNE;				p[7].u.data = 0;
-		cmds.num = 8;
+		p[7].cmd = DTV_TONE;				p[7].u.data = tone ? SEC_TONE_ON : SEC_TONE_OFF;
+		p[8].cmd = DTV_TUNE;				p[8].u.data = 0;
+		cmds.num = 9;
 		cmds.props = p;
 		if(ioctl(fe->fe_fd, FE_SET_PROPERTY, &cmds) < 0) {
 			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
