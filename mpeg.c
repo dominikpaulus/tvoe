@@ -188,16 +188,18 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 			GSList *it;
 			uint16_t cur_sid = patn_get_program(program);
 
+			/*
 			if(cur_sid == 0)
 				a->nitid = patn_get_pid(program);
+			*/
 
 			for(it = clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
-				if(c->sid != cur_sid && cur_sid != 0)
+				if(c->sid != cur_sid) // && cur_sid != 0) // NIT
 					continue;
 
 				// Send new PAT to this client
-				if(cur_sid != 0)
+				//if(cur_sid != 0) // NIT
 					send_pat(a, c, cur_sid, patn_get_pid(program));
 
 				/* Check whether callback for PMT is already installed */
