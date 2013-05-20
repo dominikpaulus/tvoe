@@ -1,6 +1,7 @@
 %option never-interactive case-insensitive yylineno warn nodefault nounput
 
 %{
+#define YY_NO_INPUT
 #include "config_parser.h"
 
 extern const char *conffile;
