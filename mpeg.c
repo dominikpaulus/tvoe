@@ -77,6 +77,11 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     psi_set_current(pat);
     psi_set_length(pat, PSI_MAX_SIZE);
 
+	pat_n = pat_get_program(pat, j++);
+	patn_init(pat_n);
+	patn_set_program(pat_n, 0);
+	patn_set_pid(pat_n, 0x10);
+
     pat_n = pat_get_program(pat, j++);
     patn_init(pat_n);
     patn_set_program(pat_n, sid);
@@ -195,21 +200,18 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		 * that request it. Add callbacks for them, if necessary.
 		 */
 		for(j = 0; (program = pat_get_program(cur, j)); j++) {
-			GSList *it;
 			uint16_t cur_sid = patn_get_program(program);
 
-			/*
 			if(cur_sid == 0)
 				a->nitid = patn_get_pid(program);
-			*/
 
-			for(it = a->clients; it != NULL; it = g_slist_next(it)) {
+			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
-				if(c->sid != cur_sid) // && cur_sid != 0) // NIT
+				if(c->sid != cur_sid && cur_sid != 0) // NIT
 					continue;
 
 				// Send new PAT to this client
-				//if(cur_sid != 0) // NIT
+				if(cur_sid != 0) // NIT
 					send_pat(a, c, cur_sid, patn_get_pid(program));
 
 				/* Check whether callback for PMT is already installed */
@@ -229,6 +231,24 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 					patn_get_pid(program)); 
 			*/
 		}
+	}
+
+	/* Additionally to the PIDs defined in the PMT, we also forward the EPG
+	 * informations to all clients. They always have PID 18. */
+	for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
+		struct client *c = it->data;
+
+		/* Check whether callback for PMT is already installed */
+		GSList *it2;
+		for(it2 = a->pids[18].callback;
+				it2 != NULL; it2 = g_slist_next(it2)) {
+			if(it2->data == c)
+				break;
+		}
+		if(it2) // Callback already registered
+			continue;
+		a->pids[18].callback =
+			g_slist_prepend(a->pids[18].callback, c);
 	}
 
 	psi_table_free(new_pat);
