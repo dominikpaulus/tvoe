@@ -161,6 +161,12 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		return;
 	}
 
+	if(!psi_table_validate(new_pat) ||
+			!pat_table_validate(new_pat)) {
+		psi_table_free(new_pat);
+		return;
+	}
+
 	/*
 	// Don't re-parse already known PATs
 	if(psi_table_validate(a->current_pat) &&
@@ -214,8 +220,10 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				a->pids[patn_get_pid(program)].callback =
 					g_slist_prepend(a->pids[patn_get_pid(program)].callback, c);
 			}
-/*			logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
-					patn_get_pid(program)); */
+			/*
+			logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
+					patn_get_pid(program)); 
+			*/
 		}
 	}
 
