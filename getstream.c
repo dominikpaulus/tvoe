@@ -55,14 +55,18 @@ int main(int argc, char **argv) {
 	init_log();
 
 	// Daemonize if necessary
+	printf("Daemonizing... ");
+	fflush(stdout);
 	if(daemonize && getppid() != 1) {
 		pid_t pid = fork();
 		if(pid < 0) {
 			perror("fork()");
 			return EXIT_FAILURE;
 		}
-		if(pid > 0)	// Exit parent
+		if(pid > 0) {// Exit parent
+			printf("success. (pid: %u)\n", pid);
 			return EXIT_SUCCESS;
+		}
 		umask(0);
 		if(setsid() < 0) {
 			perror("setsid()");

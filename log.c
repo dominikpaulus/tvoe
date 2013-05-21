@@ -41,7 +41,7 @@ void logger(int level, char *fmt, ...) {
 int init_log(void) {
 	if(logfile) {
 		fd = fopen(logfile, "a");
-		if(fd != NULL) {
+		if(!fd) {
 			fprintf(stderr, "Unable to open logfile %s: %s\n", logfile,
 					strerror(errno));
 			return -1;
