@@ -32,12 +32,12 @@ void handle_input(void *handle, unsigned char *data, size_t len);
  * invoked every time new data is ready to be sent to the client, ptr is a
  * pointer to an arbitrary data structure that will be provided unchanged to
  * the callback.
- * @param sid Requested service ID
+ * @param s Requested program
  * @param cb Callback to invoke when new data is ready
  * @param ptr Pointer to be passed to the callback when invoked
  * @return Pointer to client handle, to be passed to unregister_client()
  */
-void *register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr);
+void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), void *ptr);
 /**
  * Deregister a specific client
  * @param ptr Pointer to handle returned by register_client()

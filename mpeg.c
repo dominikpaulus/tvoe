@@ -16,10 +16,10 @@
 
 // For keeping track of registered HTTP outputs
 struct client {
-	int sid, refcnt;
+	int sid;
 	uint8_t pid0_cc;
-	bool deleted;
 	void *ptr;
+	struct transponder *t;
 	void (*cb) (struct evbuffer *, void *);
 };
 struct pid_info {
@@ -31,9 +31,13 @@ struct pid_info {
 };
 struct transponder {
 	uint16_t tsid, nitid;
+	int users;
+	void *frontend_handle;
+	struct tune in;
 	struct pid_info pids[MAX_PID];
+	GSList *clients;
 };
-static GSList *clients, *transponders;
+static GSList *transponders;
 
 static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
     uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
@@ -199,7 +203,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				a->nitid = patn_get_pid(program);
 			*/
 
-			for(it = clients; it != NULL; it = g_slist_next(it)) {
+			for(it = a->clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
 				if(c->sid != cur_sid) // && cur_sid != 0) // NIT
 					continue;
@@ -317,57 +321,79 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 	evbuffer_free(out);
 }
 
-void *register_client(unsigned int sid, void (*cb) (struct evbuffer *, void *), void *ptr) {
+void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
 	scb->ptr = ptr;
-	scb->sid = sid;
-	scb->refcnt = 0;
-	scb->deleted = false;
+	scb->sid = s.sid;
 	scb->pid0_cc = 0;
-	clients = g_slist_prepend(clients, scb);
+
+	/* Check whether we are already receiving a multiplex containing
+	 * the requested program */
+	GSList *it = transponders;
+	for(; it != NULL; it = g_slist_next(it)) {
+		struct transponder *t = it->data;
+		struct tune in = t->in;
+		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
+				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
+				in.dvbs.frequency == s.dvbs.frequency &&
+				in.dvbs.polarization == s.dvbs.polarization) {
+			t->users++;
+			t->clients = g_slist_prepend(t->clients, scb);
+			scb->t = t;
+			logger(LOG_DEBUG, "Transponder already known. New user count: %d",
+					t->users);
+			return scb;
+		}
+	}
+
+	/* We aren't, acquire new frontend */
+	struct transponder *t = g_slice_alloc(sizeof(struct transponder));
+	t->frontend_handle = acquire_frontend(s, t);
+	if(!t->frontend_handle) { // Unable to acquire frontend
+		g_slice_free1(sizeof(struct transponder), t);
+		g_slice_free1(sizeof(struct client), scb);
+		return NULL;
+	}
+	t->in = s;
+	t->users = 1;
+	t->clients = NULL;
+	t->clients = g_slist_prepend(t->clients, scb);
+	scb->t = t;
+	for(int i = 0; i < MAX_PID; i++) {
+		t->pids[i].last_cc = 0;
+		t->pids[i].callback = NULL;
+		t->pids[i].current_pmt = NULL;
+		psi_assemble_init(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
+	}
+	transponders = g_slist_prepend(transponders, t);
 	return scb;
 }
 
 void unregister_client(void *ptr) {
 	struct client *scb = ptr;
-	clients = g_slist_remove(clients, scb);
-	logger(LOG_DEBUG, "Unregistering client");
-	scb->deleted = true;
-	/* 
-	 * Iterate over all callbacks and remove this client from them.
-	 * This is extremely expensive, however, disconnects should be
-	 * rather rare. This code should be optimized in the future.
-	 */
-	for(GSList *it = transponders; it != NULL; it = g_slist_next(it)) {
-		struct transponder *t = it->data;
+	struct transponder *t = scb->t;
+	t->users--;
+	if(!t->users) { // Completely remove transponder
+		logger(LOG_DEBUG, "Last user on transponder quitted, removing transponder");
+		release_frontend(t->frontend_handle);
+		for(int i = 0; i < MAX_PID; i++) {
+			if(t->pids[i].current_pmt)
+				free(t->pids[i].current_pmt);
+			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
+		}
+		transponders = g_slist_remove(transponders, t);
+		g_slice_free1(sizeof(struct transponder), t);
+	} else { // Only unregister this client
+		logger(LOG_DEBUG, "Deregistering client");
+		/* 
+		 * Iterate over all callbacks and remove this client from them.
+		 * This is extremely expensive, however, disconnects should be
+		 * rather rare. This code should be optimized in the future.
+		 */
 		for(int i=0; i < MAX_PID; i++)
 			t->pids[i].callback = g_slist_remove(t->pids[i].callback, scb);
+		t->clients = g_slist_remove(t->clients, scb);
+		g_slice_free1(sizeof(struct client), scb);
 	}
-	g_slice_free1(sizeof(struct client), scb);
-}
-
-void *register_transponder(void) {
-	struct transponder *h = g_slice_alloc(sizeof(struct transponder));
-	int i;
-	for(i = 0; i < MAX_PID; i++) {
-		h->pids[i].last_cc = 0;
-		h->pids[i].callback = NULL;
-		h->pids[i].current_pmt = NULL;
-		psi_assemble_init(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
-	}
-	transponders = g_slist_prepend(transponders, h);
-	return h;
-}
-
-void unregister_transponder(void *handle) {
-	logger(LOG_DEBUG, "Unregister_transponder()");
-	struct transponder *h = handle;
-	for(int i = 0; i < MAX_PID; i++) {
-		if(h->pids[i].current_pmt)
-			free(h->pids[i].current_pmt);
-		psi_assemble_reset(&h->pids[i].psi_buffer, &h->pids[i].psi_buffer_used);
-	}
-	transponders = g_slist_remove(transponders, h);
-	g_slice_free1(sizeof(struct transponder), h);
 }

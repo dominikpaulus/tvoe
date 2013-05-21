@@ -19,7 +19,6 @@
 #include "frontend.h"
 
 static GList *idle_fe, *used_fe;
-static int acquire_frontend(struct tune s);
 
 struct frontend {
 	struct tune in;		/**< Associated transponder, if applicable */
@@ -31,7 +30,6 @@ struct frontend {
 	int dvr_fd;			/**< File descriptor for /dev/dvb/adapterX/dvrY (O_RDONLY) */
 	struct event *event;/**< Handle for the event callbacks on the dvr file handle */
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
-	int users;			/**< Current user refcount */
 	pthread_t thread;	/**< Handle for tuning thread */
 };
 
@@ -58,28 +56,6 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 		return;
 	}
 	handle_input(fe->mpeg_handle, buf, n);
-}
-
-int subscribe_to_frontend(struct tune s) {
-	GList *it = used_fe;
-	logger(LOG_DEBUG, "Subscribing to frontend, freq: %d", s.dvbs.frequency);
-	// Check whether we have already tuned to this transponder
-	while(it) {
-		struct tune in = ((struct frontend *) it->data)->in;
-		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
-				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
-				in.dvbs.frequency == s.dvbs.frequency &&
-				in.dvbs.polarization == s.dvbs.polarization) {
-			((struct frontend *) it->data)->users++;
-			logger(LOG_DEBUG, "Frontend already known. New user count: %d",
-					((struct frontend *) it->data)->users);
-			return 0;
-		}
-		it = g_list_next(it);
-	}
-	logger(LOG_DEBUG, "Acquiring new frontend");
-	// We don't, acquire a new tuner
-	return acquire_frontend(s);
 }
 
 /*
@@ -149,16 +125,15 @@ static void *tune_to_fe(void *arg) {
 }
 
 /* Tune to a new, previously unknown transponder */
-int acquire_frontend(struct tune s) {
+void *acquire_frontend(struct tune s, void *ptr) {
 	GList *f = g_list_first(idle_fe);
 	if(!f)
-		return -1;
+		return NULL;
 	struct frontend *fe = (struct frontend *) (f->data);
 	idle_fe = g_list_remove(idle_fe, f->data);
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
 	fe->event = NULL;
 	fe->in = s;
-	fe->users = 1;
 
 	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
 			fe->adapter, fe->frontend);
@@ -201,11 +176,7 @@ int acquire_frontend(struct tune s) {
 	fe->event = ev;
 
 	/* Register this transponder with the MPEG-TS handler */
-	fe->mpeg_handle = register_transponder();
-	if(!fe->mpeg_handle) {
-		logger(LOG_ERR, "Initialization of MPEG handling module failed.");
-		goto fail;
-	}
+	fe->mpeg_handle = ptr;
 
 	used_fe = g_list_append(used_fe, fe);
 
@@ -218,7 +189,7 @@ int acquire_frontend(struct tune s) {
 
 	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
 
-	return 0;
+	return fe;
 fail:
 	if(fe->event) {
 		event_del(fe->event);
@@ -231,41 +202,17 @@ fail:
 	if(fe->dvr_fd)
 		close(fe->dvr_fd);
 	idle_fe = g_list_append(idle_fe, f);
-	return -2;
+	return NULL;
 }
 
-void release_frontend(struct tune s) {
-	GList *it = used_fe;
-	struct frontend *fe;
-	// Reduce user count
-	while(it) {
-		fe = (struct frontend *) (it->data);
-		struct tune in = fe->in;
-		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
-				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
-				in.dvbs.frequency == s.dvbs.frequency &&
-				in.dvbs.polarization == s.dvbs.polarization) {
-			fe->users--;
-			if(fe->users) // Still users present. Nothing to do;
-				return;
-			break;
-		}
-		it = g_list_next(it);
-	}
-	if(!it)	{ // No tuned transponder found?
-		logger(LOG_NOTICE, "release_frontend() on unknown tuner");
-		return;
-	}
-	logger(LOG_DEBUG, "Last user on frontend %d/%d exited, closing FE",
-			fe->adapter, fe->frontend);
-	// Last user on transponder removed, release frontend
+void release_frontend(void *ptr) {
+	struct frontend *fe = ptr;
 	event_del(fe->event);
 	event_free(fe->event);
 	close(fe->fe_fd);
 	close(fe->dmx_fd);
 	close(fe->dvr_fd);
-	unregister_transponder(fe->mpeg_handle);
-	used_fe = g_list_remove_link(used_fe, it);
+	used_fe = g_list_remove(used_fe, fe);
 	idle_fe = g_list_append(idle_fe, fe);
 }
 

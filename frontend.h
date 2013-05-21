@@ -25,21 +25,20 @@ struct lnb {
 };
 
 /**
- * Subscribe to a specific transponder. This function increments the user count
- * if there is already a tuner tuned to this transponder, otherwise it selects
- * an idle tuner and tunes to the specified transponder.
+ * Tune to a specific transponder. This function selects a new, current unused
+ * frontend and tunes to the specified frequency. dvr_callback will be called
+ * with the argument "ptr" passed unmodified to the callback
  * @param s Struct describing the transponder to tune to
- * @return 0 if successful, <0 on error. Appropiate error message is sent to
- * the application log.
+ * @param ptr Pointer to be passed to the callback function
+ * @return Frontend handle to be passed to release_frontend(), NULL
+ * on error.
  */
-int subscribe_to_frontend(struct tune s);
+void *acquire_frontend(struct tune s, void *ptr);
 /**
- * Unsubscribe from a specific transponder. If the user count for the
- * associated frontend gets 0, releases the frontend and appends it to the list
- * of idle tuners.
- * @param s Struct describing the transonder to release
+ * Release a specific frontend
+ * @param ptr Pointer returned by acquire_frontend()
  */
-void release_frontend(struct tune s);
+void release_frontend(void *ptr);
 /**
  * Add a new DVB-S frontend on /dev/dvb/adapterX/frontendY, X and Y are
  * specified by the caller, and sets the parameters of the attached LNB.
