@@ -1,0 +1,19 @@
+# Specify HTTP listener port
+# At the moment, only one port per getstream instance is supported.
+http-listen 1234;
+
+# List of channels to serve, in "zap" file format.
+# (NAME:FREQUENCY:POLARIZATION:UNUSED:SYMBOLRATE:UNUSED:UNUSED:SID:DELIVERY_SYSTEM)
+channels "channels.conf";
+
+# Frontends to use
+# Clients will be dynamically assigned to these
+# adapters in a round-robin fashion
+frontend { adapter 0; }; # Corresponds to /dev/dvb/adapter0/...
+frontend { adapter 1; }; # Corresponds to /dev/dvb/adapter1/...
+
+# Set logfile (optional)
+logfile "getstream.log";
+
+# Log to syslog? (Optional)
+use_syslog yes;
