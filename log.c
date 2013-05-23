@@ -11,7 +11,7 @@
 char *logfile = NULL;
 int use_syslog = 0;
 int loglevel = 1;
-static FILE * fd;
+static FILE * log_fd;
 extern bool daemonize;
 
 void logger(int level, char *fmt, ...) {
@@ -30,8 +30,10 @@ void logger(int level, char *fmt, ...) {
 	vsnprintf(text, sizeof(text), fmt, args);
 	va_end(args);
 
-	if(fd)
-		fprintf(fd, "%s %s\n", tv, text);
+	if(log_fd) {
+		fprintf(log_fd, "%s %s\n", tv, text);
+		fflush(log_fd);
+	}
 	if(use_syslog)
 		syslog(level, "%s", text);
 	if(!daemonize)
@@ -40,14 +42,13 @@ void logger(int level, char *fmt, ...) {
 
 int init_log(void) {
 	if(logfile) {
-		fd = fopen(logfile, "a");
-		if(!fd) {
+		log_fd = fopen(logfile, "a");
+		if(!log_fd)
 			fprintf(stderr, "Unable to open logfile %s: %s\n", logfile,
 					strerror(errno));
-			return -1;
-		}
 	}
 	if(use_syslog)
 		openlog("getstream-sh", 0, LOG_DAEMON);
+	logger(LOG_INFO, "getstream-sh starting");
 	return 0;
 }

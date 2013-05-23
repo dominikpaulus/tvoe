@@ -55,9 +55,9 @@ int main(int argc, char **argv) {
 	init_log();
 
 	// Daemonize if necessary
-	printf("Daemonizing... ");
-	fflush(stdout);
 	if(daemonize && getppid() != 1) {
+		printf("Daemonizing... ");
+		fflush(stdout);
 		pid_t pid = fork();
 		if(pid < 0) {
 			perror("fork()");
