@@ -26,11 +26,10 @@ struct pid_info {
 	int8_t last_cc;
 	uint8_t *psi_buffer;
 	uint16_t psi_buffer_used;
-	uint8_t *current_pmt;
 	GSList *callback;
 };
 struct transponder {
-	uint16_t tsid, nitid;
+	uint16_t tsid;
 	int users;
 	void *frontend_handle;
 	struct tune in;
@@ -70,17 +69,12 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
 	uint8_t *pat_n, j = 0;
 
     pat_init(pat);
-    pat_set_tsid(pat, a->tsid);
+	pat_set_tsid(pat, 0);
     psi_set_section(pat, 0);
     psi_set_lastsection(pat, 0);
-    psi_set_version(pat, 2);
+    psi_set_version(pat, 0);
     psi_set_current(pat);
     psi_set_length(pat, PSI_MAX_SIZE);
-
-	pat_n = pat_get_program(pat, j++);
-	patn_init(pat_n);
-	patn_set_program(pat_n, 0);
-	patn_set_pid(pat_n, 0x10);
 
     pat_n = pat_get_program(pat, j++);
     patn_init(pat_n);
@@ -97,12 +91,26 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     free(pat);
 }
 
+static void register_callback(GSList *it, struct transponder *a, uint16_t pid) {
+	// Loop over all supplied clients and add them if requested
+	for(; it; it = g_slist_next(it)) {
+		GSList *it2 = a->pids[pid].callback;
+		for(; it2 != NULL; it2 = g_slist_next(it2)) {
+			if(it2->data == it->data)
+				break;
+		}
+		if(it2) // Client already registered
+			continue;
+		a->pids[pid].callback =
+			g_slist_prepend(a->pids[pid].callback, it->data);
+	}
+}
+
 /*
  * Process a new parsed PMT. Map PIDs to corresponding SIDs.
  * @param p Pointer to struct pmt_handle
  */
 static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
-//	uint16_t sid = pmt_get_program(section);
 	int j;
 
 	if(!pmt_validate(section)) {
@@ -111,39 +119,14 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		return;
 	}
 
-	/*
-	if(a->pids[pid].current_pmt &&
-			psi_compare(a->pids[pid].current_pmt, section)) {
-		free(section);
-		return;
-	}
-	logger(LOG_DEBUG, "New PMT for SID %d found", pid);
-	*/
-
 	uint8_t *es;
-	// Loop over all elementary streams for this SID
-	for(j = 0; (es = pmt_get_es(section, j)); j++) {
-		GSList *it = a->pids[pid].callback; // PMT callbacks
+	// Register callback for all elementary streams for this SID
+	for(j = 0; (es = pmt_get_es(section, j)); j++)
+		register_callback(a->pids[pid].callback, a, pmtn_get_pid(es));
+	// ... and for the PCR
+	register_callback(a->pids[pid].callback, a, pmt_get_pcrpid(section));
 
-		// Register callbacks for all clients that subscribed to this
-		// program on all PIDs referenced by it
-		for(; it != NULL; it = g_slist_next(it)) {
-			// ES callbacks
-			GSList *it2 = a->pids[pmtn_get_pid(es)].callback;
-			for(; it2 != NULL; it2 = g_slist_next(it2)) {
-				if(it2->data == it->data)
-					break;
-			}
-			if(it2) // Client already registered
-				continue;
-			a->pids[pmtn_get_pid(es)].callback =
-				g_slist_prepend(a->pids[pmtn_get_pid(es)].callback, it->data);
-		}
-		//logger(LOG_DEBUG, "PID: %d", pmtn_get_pid(es));
-	}
-
-	free(a->pids[pid].current_pmt);
-	a->pids[pid].current_pmt = section;
+	free(section);
 
 	//pmt_print(section, print, NULL, NULL, NULL, 123);
 }
@@ -202,17 +185,13 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		for(j = 0; (program = pat_get_program(cur, j)); j++) {
 			uint16_t cur_sid = patn_get_program(program);
 
-			if(cur_sid == 0)
-				a->nitid = patn_get_pid(program);
-
 			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
-				if(c->sid != cur_sid && cur_sid != 0) // NIT
+				if(c->sid != cur_sid)
 					continue;
 
 				// Send new PAT to this client
-				if(cur_sid != 0) // NIT
-					send_pat(a, c, cur_sid, patn_get_pid(program));
+				send_pat(a, c, cur_sid, patn_get_pid(program));
 
 				/* Check whether callback for PMT is already installed */
 				GSList *it2;
@@ -226,30 +205,14 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				a->pids[patn_get_pid(program)].callback =
 					g_slist_prepend(a->pids[patn_get_pid(program)].callback, c);
 			}
-			/*
-			logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
-					patn_get_pid(program)); 
-			*/
+			//logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
+			//		patn_get_pid(program)); 
 		}
 	}
 
 	/* Additionally to the PIDs defined in the PMT, we also forward the EPG
 	 * informations to all clients. They always have PID 18. */
-	for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
-		struct client *c = it->data;
-
-		/* Check whether callback for PMT is already installed */
-		GSList *it2;
-		for(it2 = a->pids[18].callback;
-				it2 != NULL; it2 = g_slist_next(it2)) {
-			if(it2->data == c)
-				break;
-		}
-		if(it2) // Callback already registered
-			continue;
-		a->pids[18].callback =
-			g_slist_prepend(a->pids[18].callback, c);
-	}
+	register_callback(a->clients, a, 18);
 
 	psi_table_free(new_pat);
 
@@ -296,25 +259,19 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 
 		// Mostly c&p from biTstream examples
 
+		// Send packet to clients
+		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
+			struct client *c = it->data;
+			evbuffer_add(out, cur, TS_SIZE);
+			c->cb(out, c->ptr);
+		}
+
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
 				!ts_has_payload(cur))
 			continue;
 		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[pid].last_cc))
 			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
-
-		// Send packet to clients
-		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
-			//if(pid == 100)
-			//	logger(LOG_DEBUG, "PID %d CC: %d", pid, ts_get_cc(cur));
-			struct client *c = it->data;
-			evbuffer_add(out, cur, TS_SIZE);
-			c->cb(out, c->ptr);
-			//logger(LOG_DEBUG, "Packet out");
-		}
 	
-		//if(pid == 100)
-		//	logger(LOG_DEBUG, "Still there");
-
 		a->pids[pid].last_cc = ts_get_cc(cur);
 
 		const uint8_t *payload = ts_section(cur);
@@ -383,7 +340,6 @@ void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), voi
 	for(int i = 0; i < MAX_PID; i++) {
 		t->pids[i].last_cc = 0;
 		t->pids[i].callback = NULL;
-		t->pids[i].current_pmt = NULL;
 		psi_assemble_init(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 	}
 	transponders = g_slist_prepend(transponders, t);
@@ -398,8 +354,6 @@ void unregister_client(void *ptr) {
 		logger(LOG_DEBUG, "Last user on transponder quitted, removing transponder");
 		release_frontend(t->frontend_handle);
 		for(int i = 0; i < MAX_PID; i++) {
-			if(t->pids[i].current_pmt)
-				free(t->pids[i].current_pmt);
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 		}
 		transponders = g_slist_remove(transponders, t);
