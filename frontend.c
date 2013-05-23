@@ -19,6 +19,9 @@
 #include "frontend.h"
 
 static GList *idle_fe, *used_fe;
+static GAsyncQueue *tune_work;
+static pthread_t tune_thread;
+static GMutex queue_lock;
 
 struct frontend {
 	struct tune in;		/**< Associated transponder, if applicable */
@@ -30,8 +33,47 @@ struct frontend {
 	int dvr_fd;			/**< File descriptor for /dev/dvb/adapterX/dvrY (O_RDONLY) */
 	struct event *event;/**< Handle for the event callbacks on the dvr file handle */
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
-	pthread_t thread;	/**< Handle for tuning thread */
 };
+
+struct work {
+	int action;			/**< 1: Tune, 2: Release */
+	struct frontend *fe;
+};
+
+static void tune_to_fe(struct frontend *fe);
+
+static void release_fe(struct frontend *fe) {
+	close(fe->fe_fd);
+	close(fe->dmx_fd);
+	close(fe->dvr_fd);
+	g_mutex_lock(&queue_lock);
+	idle_fe = g_list_append(idle_fe, fe);
+	g_mutex_unlock(&queue_lock);
+}
+
+static void *tune_worker(void *ptr) {
+	for(;;) {
+		struct work *w = g_async_queue_pop(tune_work);
+		struct frontend *fe = w->fe;
+		logger(LOG_DEBUG, "Tune thread: New work! :-)");
+		if(w->action == 1)
+			tune_to_fe(fe);
+		else
+			release_fe(fe);
+		g_free(w);
+	}
+	return NULL;
+}
+
+void init_frontend(void) {
+	tune_work = g_async_queue_new();
+	g_mutex_init(&queue_lock);
+	/* Start tuning thread */
+	if((errno = pthread_create(&tune_thread, NULL, tune_worker, NULL)) < 0) {
+		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+}
 
 /** Compute program frequency based on transponder frequency
  * and LNB parameters. Ripped from getstream-poempel */
@@ -49,6 +91,12 @@ static int get_frequency(int freq, struct lnb l) {
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
 	unsigned char buf[1024 * 188];
+
+	if(flags & EV_TIMEOUT) {
+		logger(LOG_ERR, "Timeout reading data from frontend");
+		return;
+	}
+
 	int n = read(fd, buf, sizeof(buf));
 	if(n < 0) {
 		logger(LOG_ERR, "Invalid read on frontend: %s",
@@ -61,9 +109,7 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 /*
  * Thread handling FE parameter setting
  */
-static void *tune_to_fe(void *arg) {
-	pthread_detach(pthread_self());
-	struct frontend *fe = arg;
+static void tune_to_fe(struct frontend *fe) {
 	struct tune s = fe->in;
 	// TODO: Proper error handling for this function. At the moment, we just return
 	// leaving this frontend idle - eventually, all clients will drop and we will
@@ -90,7 +136,7 @@ static void *tune_to_fe(void *arg) {
 			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
-			return NULL; // TODO
+			return;
 		}
 	}
 	/* Now wait for the tuning to be successful */
@@ -104,7 +150,7 @@ static void *tune_to_fe(void *arg) {
 	if(ev.status & FE_TIMEDOUT) {
 		logger(LOG_ERR, "Timed out waiting for lock on frontend %d/%d",
 				fe->adapter, fe->frontend);
-		return NULL;
+		return;
 	}
 	logger(LOG_INFO, "Tuning on adapter %d/%d succeeded",
 			fe->adapter, fe->frontend);
@@ -118,19 +164,24 @@ static void *tune_to_fe(void *arg) {
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
 			logger(LOG_ERR, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
-			return NULL;
+			return;
 		}
 	}
-	return NULL;
 }
 
 /* Tune to a new, previously unknown transponder */
 void *acquire_frontend(struct tune s, void *ptr) {
+	// Get new idle frontend from queue
+	g_mutex_lock(&queue_lock);
 	GList *f = g_list_first(idle_fe);
-	if(!f)
+	if(!f) {
+		g_mutex_unlock(&queue_lock);
 		return NULL;
+	}
+	idle_fe = g_list_remove_link(idle_fe, f);
+	g_mutex_unlock(&queue_lock);
+
 	struct frontend *fe = (struct frontend *) (f->data);
-	idle_fe = g_list_remove(idle_fe, f->data);
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
 	fe->event = NULL;
 	fe->in = s;
@@ -168,7 +219,7 @@ void *acquire_frontend(struct tune s, void *ptr) {
 
 	/* Add libevent callback for TS input */
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
-	struct timeval tv = { 30, 0 }; // 30s timeout
+	struct timeval tv = { 10, 0 }; // 10s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_ERR, "Adding frontend to libevent failed.");
 		goto fail;
@@ -178,14 +229,15 @@ void *acquire_frontend(struct tune s, void *ptr) {
 	/* Register this transponder with the MPEG-TS handler */
 	fe->mpeg_handle = ptr;
 
+	g_mutex_lock(&queue_lock);
 	used_fe = g_list_append(used_fe, fe);
+	g_mutex_unlock(&queue_lock);
 
-	/* Start tuning thread */
-	if((errno = pthread_create(&fe->thread, NULL, tune_to_fe,
-					fe)) < 0) {
-		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
-		goto fail;
-	}
+	// Tell tuning thread to tune
+	struct work *w = g_malloc(sizeof(struct work));
+	w->action = 1;
+	w->fe = fe;
+	g_async_queue_push(tune_work, w);
 
 	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
 
@@ -201,7 +253,9 @@ fail:
 		close(fe->dmx_fd);
 	if(fe->dvr_fd)
 		close(fe->dvr_fd);
+	g_mutex_lock(&queue_lock);
 	idle_fe = g_list_append(idle_fe, f);
+	g_mutex_unlock(&queue_lock);
 	return NULL;
 }
 
@@ -209,11 +263,13 @@ void release_frontend(void *ptr) {
 	struct frontend *fe = ptr;
 	event_del(fe->event);
 	event_free(fe->event);
-	close(fe->fe_fd);
-	close(fe->dmx_fd);
-	close(fe->dvr_fd);
+	g_mutex_lock(&queue_lock);
 	used_fe = g_list_remove(used_fe, fe);
-	idle_fe = g_list_append(idle_fe, fe);
+	g_mutex_unlock(&queue_lock);
+	struct work *w = g_malloc(sizeof(struct work));
+	w->action = 2;
+	w->fe = fe;
+	g_async_queue_push(tune_work, w);
 }
 
 void add_frontend(int adapter, int frontend, struct lnb l) {

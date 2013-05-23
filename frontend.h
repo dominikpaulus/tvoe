@@ -49,5 +49,6 @@ void release_frontend(void *ptr);
  * @param frontend Frontend number
  */
 void add_frontend(int adapter, int frontend, struct lnb l);
+void init_frontend(void);
 
 #endif

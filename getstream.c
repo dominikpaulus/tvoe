@@ -90,6 +90,9 @@ int main(int argc, char **argv) {
 		sigaction(SIGPIPE, &action, NULL);
 	}
 
+	/* Initialize frontend handler*/
+	init_frontend();
+
 	event_dispatch();
 
 	logger(LOG_ERR, "Event loop exited");
