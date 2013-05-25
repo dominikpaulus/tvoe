@@ -34,14 +34,14 @@ struct transponder {
 	void *frontend_handle;
 	struct tune in;
 	struct pid_info pids[MAX_PID];
+	struct evbuffer *out;
 	GSList *clients;
 };
 static GSList *transponders;
 
-static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
+static void output_psi_section(struct transponder *a, struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
     uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
     uint16_t section_offset = 0;
-	struct evbuffer *ev = evbuffer_new();
     do {
         uint8_t ts[TS_SIZE];
         uint8_t ts_offset = 0;
@@ -58,10 +58,9 @@ static void output_psi_section(struct client *c, uint8_t *section, uint16_t pid,
             psi_split_end(ts, &ts_offset);
 
 
-		evbuffer_add(ev, ts, TS_SIZE);
-		c->cb(ev, c->ptr);
+		evbuffer_add(a->out, ts, TS_SIZE);
+		c->cb(c->ptr, a->out);
     } while (section_offset < section_length);
-	evbuffer_free(ev);
 }
 
 static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
@@ -86,7 +85,7 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     pat_set_length(pat, pat_n - pat - PAT_HEADER_SIZE);
     psi_set_crc(pat);
 
-	output_psi_section(c, pat, PAT_PID, &c->pid0_cc);
+	output_psi_section(a, c, pat, PAT_PID, &c->pid0_cc);
 
     free(pat);
 }
@@ -240,16 +239,13 @@ static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section
 
 void handle_input(void *ptr, unsigned char *data, size_t len) {
 	struct transponder *a = ptr;
-	struct evbuffer *out;
 
-	int i;
 	if(len % TS_SIZE) {
 		logger(LOG_NOTICE, "Unaligned MPEG-TS packets received, dropping.");
 		return;
 	}
 
-	out = evbuffer_new();
-	for(i=0; i < len; i+=TS_SIZE) {
+	for(int i=0; i < len; i+=TS_SIZE) {
 		uint8_t *cur = data + i;
 		uint16_t pid = ts_get_pid(cur);
 		GSList *it;
@@ -262,8 +258,8 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
 			struct client *c = it->data;
-			evbuffer_add(out, cur, TS_SIZE);
-			c->cb(out, c->ptr);
+			evbuffer_add(a->out, cur, TS_SIZE);
+			c->cb(c->ptr, a->out);
 		}
 
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
@@ -294,11 +290,9 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 				handle_section(a, pid, section);
 		}
 	}
-
-	evbuffer_free(out);
 }
 
-void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), void *ptr) {
+void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
 	scb->ptr = ptr;
@@ -333,6 +327,7 @@ void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), voi
 		return NULL;
 	}
 	t->in = s;
+	t->out = evbuffer_new();
 	t->users = 1;
 	t->clients = NULL;
 	t->clients = g_slist_prepend(t->clients, scb);
@@ -355,7 +350,10 @@ void unregister_client(void *ptr) {
 		release_frontend(t->frontend_handle);
 		for(int i = 0; i < MAX_PID; i++) {
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
+			g_slist_free(t->pids[i].callback);
 		}
+		evbuffer_free(t->out);
+		g_slice_free1(sizeof(struct client), scb);
 		transponders = g_slist_remove(transponders, t);
 		g_slice_free1(sizeof(struct transponder), t);
 	} else { // Only unregister this client

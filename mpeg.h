@@ -37,7 +37,7 @@ void handle_input(void *handle, unsigned char *data, size_t len);
  * @param ptr Pointer to be passed to the callback when invoked
  * @return Pointer to client handle, to be passed to unregister_client()
  */
-void *register_client(struct tune s, void (*cb) (struct evbuffer *, void *), void *ptr);
+void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *), void *ptr);
 /**
  * Deregister a specific client
  * @param ptr Pointer to handle returned by register_client()
