@@ -93,14 +93,16 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	unsigned char buf[1024 * 188];
 
 	if(flags & EV_TIMEOUT) {
-		logger(LOG_ERR, "Timeout reading data from frontend");
+		logger(LOG_ERR, "Timeout reading data from frontend %d/%d", fe->adapter,
+				fe->frontend);
+		mpeg_notify_timeout(fe->mpeg_handle);
 		return;
 	}
 
 	int n = read(fd, buf, sizeof(buf));
 	if(n < 0) {
-		logger(LOG_ERR, "Invalid read on frontend: %s",
-				strerror(errno));
+		logger(LOG_ERR, "Invalid read on frontend %d/%d: %s",
+				fe->adapter, fe->frontend, strerror(errno));
 		return;
 	}
 	handle_input(fe->mpeg_handle, buf, n);
@@ -140,6 +142,7 @@ static void tune_to_fe(struct frontend *fe) {
 		}
 	}
 	/* Now wait for the tuning to be successful */
+	/*
 	struct dvb_frontend_event ev;
 	do {
 		if(ioctl(fe->fe_fd, FE_GET_EVENT, &ev) < 0) {
@@ -152,6 +155,7 @@ static void tune_to_fe(struct frontend *fe) {
 				fe->adapter, fe->frontend);
 		return;
 	}
+	*/
 	logger(LOG_INFO, "Tuning on adapter %d/%d succeeded",
 			fe->adapter, fe->frontend);
 	{

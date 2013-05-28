@@ -39,6 +39,11 @@ static void http_check_bufsize(evutil_socket_t fd, short what, void *arg) {
 	}
 }
 
+void http_timeout(void *arg) {
+	evhttp_send_reply_end(arg);
+	evhttp_connection_free(evhttp_request_get_connection(arg));
+}
+
 /*
  * Invoked by libevent when new HTTP request is received
  */
@@ -46,7 +51,7 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 	struct tune *t = ptr;
 	void *handle;
 	logger(LOG_INFO, "New request for SID %d", t->sid);
-	if(!(handle = register_client(*t, (void (*) (void *, struct evbuffer *)) evhttp_send_reply_chunk, req))) {
+	if(!(handle = register_client(*t, (void (*) (void *, struct evbuffer *)) evhttp_send_reply_chunk, http_timeout, req))) {
 		logger(LOG_NOTICE, "Unable to fulfill request: register_client() failed");
 		evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
 		return;

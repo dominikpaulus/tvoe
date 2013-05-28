@@ -34,14 +34,17 @@ void handle_input(void *handle, unsigned char *data, size_t len);
  * the callback.
  * @param s Requested program
  * @param cb Callback to invoke when new data is ready
+ * @param timeout_cb Callback to invoke on frontend tune timeout
  * @param ptr Pointer to be passed to the callback when invoked
  * @return Pointer to client handle, to be passed to unregister_client()
  */
-void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *), void *ptr);
+void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
+		void (*timeout_cb) (void *), void *ptr);
 /**
  * Deregister a specific client
  * @param ptr Pointer to handle returned by register_client()
  */
 void unregister_client(void *ptr);
+void mpeg_notify_timeout(void *handle);
 
 #endif

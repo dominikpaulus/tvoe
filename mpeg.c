@@ -20,7 +20,8 @@ struct client {
 	uint8_t pid0_cc;
 	void *ptr;
 	struct transponder *t;
-	void (*cb) (struct evbuffer *, void *);
+	void (*cb) (void *, struct evbuffer *);
+	void (*timeout_cb) (void *);
 };
 struct pid_info {
 	int8_t last_cc;
@@ -292,9 +293,26 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 	}
 }
 
-void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *), void *ptr) {
+void mpeg_notify_timeout(void *handle) {
+	struct transponder *t = handle;
+	release_frontend(t->frontend_handle);
+	t->frontend_handle = acquire_frontend(t->in, t);
+	if(!t->frontend_handle) {
+		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
+		GSList *copy = g_slist_copy(t->clients);
+		for(GSList *it = copy; it; it = g_slist_next(it)) {
+			struct client *scb = it->data;
+			scb->timeout_cb(scb->ptr);
+		}
+		g_slist_free(copy);
+	}
+}
+
+void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
+		void (*timeout_cb) (void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
+	scb->timeout_cb = timeout_cb;
 	scb->ptr = ptr;
 	scb->sid = s.sid;
 	scb->pid0_cc = 0;
@@ -347,7 +365,8 @@ void unregister_client(void *ptr) {
 	t->users--;
 	if(!t->users) { // Completely remove transponder
 		logger(LOG_DEBUG, "Last user on transponder quitted, removing transponder");
-		release_frontend(t->frontend_handle);
+		if(t->frontend_handle)
+			release_frontend(t->frontend_handle);
 		for(int i = 0; i < MAX_PID; i++) {
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 			g_slist_free(t->pids[i].callback);
