@@ -109,7 +109,7 @@ frontend: FRONTEND '{' frontendoptions '}' {
 		l.lof2 = 10600000;
 	if(!l.slof)
 		l.slof = 11700000;
-	add_frontend(adapter, 0, l);
+	frontend_add(adapter, 0, l);
 	adapter = -1;
 }
 frontendoptions: | frontendoptions frontendoption;

@@ -14,14 +14,23 @@
  * TODO: Licensing information.
  */
 
-// For keeping track of registered HTTP outputs
+/*
+ * Struct describing one specific client and the associated callbacks
+ */
 struct client {
+	/** sid requested by this client */
 	int sid;
+	/** As we send different PATs to different clients, we have a per-client
+	 * PAT continuity counter */
 	uint8_t pid0_cc;
-	void *ptr;
+	/** Associated transponder */
 	struct transponder *t;
+	/** Callback for MPEG-TS input */
 	void (*cb) (void *, struct evbuffer *);
+	/** Callback to call on timeout */
 	void (*timeout_cb) (void *);
+	/** Argument to supply to the callback functions */
+	void *ptr;
 };
 struct pid_info {
 	int8_t last_cc;
@@ -30,16 +39,23 @@ struct pid_info {
 	GSList *callback;
 };
 struct transponder {
+	/** Transport stream ID. Taken over as part of the PAT */
 	uint16_t tsid;
+	/** User refcount */
 	int users;
+	/** Handle for the associated frontend */
 	void *frontend_handle;
+	/** Current frequency */
 	struct tune in;
 	struct pid_info pids[MAX_PID];
+	/** Used as temporary data storage for data sent to the client */
 	struct evbuffer *out;
+	/** List of clients subscribed to this transponder */
 	GSList *clients;
 };
 static GSList *transponders;
 
+/* Helper function for send_pat() */
 static void output_psi_section(struct transponder *a, struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
     uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
     uint16_t section_offset = 0;
@@ -91,6 +107,8 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     free(pat);
 }
 
+/* Helper function to register all clients in it as callbacks for PID pid
+ * on transponder a */
 static void register_callback(GSList *it, struct transponder *a, uint16_t pid) {
 	// Loop over all supplied clients and add them if requested
 	for(; it; it = g_slist_next(it)) {
@@ -127,8 +145,6 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	register_callback(a->pids[pid].callback, a, pmt_get_pcrpid(section));
 
 	free(section);
-
-	//pmt_print(section, print, NULL, NULL, NULL, 123);
 }
 
 /*
@@ -238,7 +254,7 @@ static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section
 	}
 }
 
-void handle_input(void *ptr, unsigned char *data, size_t len) {
+void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 	struct transponder *a = ptr;
 
 	if(len % TS_SIZE) {
@@ -295,8 +311,8 @@ void handle_input(void *ptr, unsigned char *data, size_t len) {
 
 void mpeg_notify_timeout(void *handle) {
 	struct transponder *t = handle;
-	release_frontend(t->frontend_handle);
-	t->frontend_handle = acquire_frontend(t->in, t);
+	frontend_release(t->frontend_handle);
+	t->frontend_handle = frontend_acquire(t->in, t);
 	if(!t->frontend_handle) {
 		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
 		GSList *copy = g_slist_copy(t->clients);
@@ -308,7 +324,7 @@ void mpeg_notify_timeout(void *handle) {
 	}
 }
 
-void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
+void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
 		void (*timeout_cb) (void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
@@ -338,7 +354,7 @@ void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
 
 	/* We aren't, acquire new frontend */
 	struct transponder *t = g_slice_alloc(sizeof(struct transponder));
-	t->frontend_handle = acquire_frontend(s, t);
+	t->frontend_handle = frontend_acquire(s, t);
 	if(!t->frontend_handle) { // Unable to acquire frontend
 		g_slice_free1(sizeof(struct transponder), t);
 		g_slice_free1(sizeof(struct client), scb);
@@ -359,14 +375,14 @@ void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
 	return scb;
 }
 
-void unregister_client(void *ptr) {
+void mpeg_unregister(void *ptr) {
 	struct client *scb = ptr;
 	struct transponder *t = scb->t;
 	t->users--;
 	if(!t->users) { // Completely remove transponder
 		logger(LOG_DEBUG, "Last user on transponder quitted, removing transponder");
 		if(t->frontend_handle)
-			release_frontend(t->frontend_handle);
+			frontend_release(t->frontend_handle);
 		for(int i = 0; i < MAX_PID; i++) {
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 			g_slist_free(t->pids[i].callback);

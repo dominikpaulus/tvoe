@@ -30,15 +30,15 @@ struct lnb {
  * with the argument "ptr" passed unmodified to the callback
  * @param s Struct describing the transponder to tune to
  * @param ptr Pointer to be passed to the callback function
- * @return Frontend handle to be passed to release_frontend(), NULL
+ * @return Frontend handle to be passed to frontend_release(), NULL
  * on error.
  */
-void *acquire_frontend(struct tune s, void *ptr);
+void *frontend_acquire(struct tune s, void *ptr);
 /**
  * Release a specific frontend
- * @param ptr Pointer returned by acquire_frontend()
+ * @param ptr Pointer returned by frontend_acquire()
  */
-void release_frontend(void *ptr);
+void frontend_release(void *ptr);
 /**
  * Add a new DVB-S frontend on /dev/dvb/adapterX/frontendY, X and Y are
  * specified by the caller, and sets the parameters of the attached LNB.
@@ -48,7 +48,10 @@ void release_frontend(void *ptr);
  * @param adapter Adapter number
  * @param frontend Frontend number
  */
-void add_frontend(int adapter, int frontend, struct lnb l);
-void init_frontend(void);
+void frontend_add(int adapter, int frontend, struct lnb l);
+/**
+ * Initialize the frontend management subsystem
+ */
+void frontend_init(void);
 
 #endif

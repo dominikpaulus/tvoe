@@ -5,8 +5,10 @@
 #include "mpeg.h"
 #include "http.h"
 
+/* Global handle for the HTTP base used by getstream */
 struct evhttp *httpd;
-struct output {
+
+struct http_output {
 	struct tune *t;
 	void *handle;
 	struct event *timer;
@@ -14,12 +16,12 @@ struct output {
 
 // Called by libevent on connection close
 static void http_closecb(struct evhttp_connection *req, void *ptr) {
-	struct output *c = (struct output *) ptr;
-	unregister_client(c->handle);
+	struct http_output *c = (struct http_output *) ptr;
+	mpeg_unregister(c->handle);
 	event_del(c->timer);
 	event_free(c->timer);
 	logger(LOG_DEBUG, "Dropping HTTP connection");
-	g_slice_free1(sizeof(struct output), ptr);
+	g_slice_free1(sizeof(struct http_output), ptr);
 }
 
 /* 
@@ -51,12 +53,12 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 	struct tune *t = ptr;
 	void *handle;
 	logger(LOG_INFO, "New request for SID %d", t->sid);
-	if(!(handle = register_client(*t, (void (*) (void *, struct evbuffer *)) evhttp_send_reply_chunk, http_timeout, req))) {
-		logger(LOG_NOTICE, "Unable to fulfill request: register_client() failed");
+	if(!(handle = mpeg_register(*t, (void (*) (void *, struct evbuffer *)) evhttp_send_reply_chunk, http_timeout, req))) {
+		logger(LOG_NOTICE, "Unable to fulfill request: mpeg_register() failed");
 		evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
 		return;
 	}
-	struct output *c = g_slice_alloc(sizeof(struct output));
+	struct http_output *c = g_slice_new(struct http_output);
 	c->handle = handle;
 	c->t = t;
 
@@ -69,7 +71,7 @@ static void http_callback(struct evhttp_request *req, void *ptr) {
 	event_add(c->timer, &tv);
 }
 
-void add_channel(const char *name, int sid, struct tune t) {
+void http_add_channel(const char *name, int sid, struct tune t) {
 	char text[128];
 	snprintf(text, sizeof(text), "/by-sid/%d", sid);
 	struct tune *ptr = g_slice_alloc(sizeof(struct tune));

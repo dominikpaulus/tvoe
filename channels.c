@@ -58,7 +58,7 @@ int parse_channels(const char *file) {
 			atoi(tok.t[1]) * 1000, // frequency
 			atoi(tok.t[4]) * 1000, // symbol rate
 			pol }, atoi(tok.t[7]) }; // polarization and SID
-		add_channel(tok.t[0], atoi(tok.t[7]), l);
+		http_add_channel(tok.t[0], atoi(tok.t[7]), l);
 	}
 	if(ferror(fd)) {
 		logger(LOG_ERR, "channels.conf read failed: %s",

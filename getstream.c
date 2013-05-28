@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 	}
 
 	/* Initialize frontend handler*/
-	init_frontend();
+	frontend_init();
 
 	event_dispatch();
 

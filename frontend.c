@@ -19,7 +19,6 @@
 #include "frontend.h"
 
 static GList *idle_fe, *used_fe;
-static GAsyncQueue *tune_work;
 static pthread_t tune_thread;
 static GMutex queue_lock;
 
@@ -35,46 +34,6 @@ struct frontend {
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
 };
 
-struct work {
-	int action;			/**< 1: Tune, 2: Release */
-	struct frontend *fe;
-};
-
-static void tune_to_fe(struct frontend *fe);
-
-static void release_fe(struct frontend *fe) {
-	close(fe->fe_fd);
-	close(fe->dmx_fd);
-	close(fe->dvr_fd);
-	g_mutex_lock(&queue_lock);
-	idle_fe = g_list_append(idle_fe, fe);
-	g_mutex_unlock(&queue_lock);
-}
-
-static void *tune_worker(void *ptr) {
-	for(;;) {
-		struct work *w = g_async_queue_pop(tune_work);
-		struct frontend *fe = w->fe;
-		logger(LOG_DEBUG, "Tune thread: New work! :-)");
-		if(w->action == 1)
-			tune_to_fe(fe);
-		else
-			release_fe(fe);
-		g_free(w);
-	}
-	return NULL;
-}
-
-void init_frontend(void) {
-	tune_work = g_async_queue_new();
-	g_mutex_init(&queue_lock);
-	/* Start tuning thread */
-	if((errno = pthread_create(&tune_thread, NULL, tune_worker, NULL)) < 0) {
-		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-}
-
 /** Compute program frequency based on transponder frequency
  * and LNB parameters. Ripped from getstream-poempel */
 static int get_frequency(int freq, struct lnb l) {
@@ -87,29 +46,28 @@ static int get_frequency(int freq, struct lnb l) {
 		return freq;
 }
 
-/* libevent callback for data on dvr fd */
-static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
-	struct frontend *fe = (struct frontend *) arg;
-	unsigned char buf[1024 * 188];
+/*
+ * Most ioctl() operations on the DVB frontends are asynchronous (they usually
+ * return before the request is completed), but can't be expected to be
+ * non-blocking. Thus, we do all the frontend parameter settings in a seperate
+ * thread. Work is provided to the tuning thread using the GASyncQueue
+ * work_queue.
+ *
+ * As the frontend is inserted into the idle_fe list by the tuner thread after
+ * release, we have to synchronize access to the idle_fe queue using the
+ * tune_thread lock.
+ */
 
-	if(flags & EV_TIMEOUT) {
-		logger(LOG_ERR, "Timeout reading data from frontend %d/%d", fe->adapter,
-				fe->frontend);
-		mpeg_notify_timeout(fe->mpeg_handle);
-		return;
-	}
-
-	int n = read(fd, buf, sizeof(buf));
-	if(n < 0) {
-		logger(LOG_ERR, "Invalid read on frontend %d/%d: %s",
-				fe->adapter, fe->frontend, strerror(errno));
-		return;
-	}
-	handle_input(fe->mpeg_handle, buf, n);
-}
+#define FE_WORK_TUNE 	1
+#define FE_WORK_RELEASE	2
+struct work {
+	int action;
+	struct frontend *fe;
+};
+static GAsyncQueue *work_queue;
 
 /*
- * Thread handling FE parameter setting
+ * Tune previously unkown frontend
  */
 static void tune_to_fe(struct frontend *fe) {
 	struct tune s = fe->in;
@@ -173,8 +131,65 @@ static void tune_to_fe(struct frontend *fe) {
 	}
 }
 
+static void release_fe(struct frontend *fe) {
+	close(fe->fe_fd);
+	close(fe->dmx_fd);
+	close(fe->dvr_fd);
+	g_mutex_lock(&queue_lock);
+	idle_fe = g_list_append(idle_fe, fe);
+	g_mutex_unlock(&queue_lock);
+}
+
+/*
+ * Frontend worker thread main routine
+ */
+static void *tune_worker(void *ptr) {
+	for(;;) {
+		struct work *w = g_async_queue_pop(work_queue);
+		struct frontend *fe = w->fe;
+		logger(LOG_DEBUG, "Tune thread: New work! :-)");
+		if(w->action == 1)
+			tune_to_fe(fe);
+		else
+			release_fe(fe);
+		g_free(w);
+	}
+	return NULL;
+}
+
+void frontend_init(void) {
+	work_queue = g_async_queue_new();
+	g_mutex_init(&queue_lock);
+	/* Start tuning thread */
+	if((errno = pthread_create(&tune_thread, NULL, tune_worker, NULL)) < 0) {
+		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* libevent callback for data on dvr fd */
+static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
+	struct frontend *fe = (struct frontend *) arg;
+	unsigned char buf[1024 * 188];
+
+	if(flags & EV_TIMEOUT) {
+		logger(LOG_ERR, "Timeout reading data from frontend %d/%d", fe->adapter,
+				fe->frontend);
+		mpeg_notify_timeout(fe->mpeg_handle);
+		return;
+	}
+
+	int n = read(fd, buf, sizeof(buf));
+	if(n < 0) {
+		logger(LOG_ERR, "Invalid read on frontend %d/%d: %s",
+				fe->adapter, fe->frontend, strerror(errno));
+		return;
+	}
+	mpeg_input(fe->mpeg_handle, buf, n);
+}
+
 /* Tune to a new, previously unknown transponder */
-void *acquire_frontend(struct tune s, void *ptr) {
+void *frontend_acquire(struct tune s, void *ptr) {
 	// Get new idle frontend from queue
 	g_mutex_lock(&queue_lock);
 	GList *f = g_list_first(idle_fe);
@@ -189,6 +204,7 @@ void *acquire_frontend(struct tune s, void *ptr) {
 	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
 	fe->event = NULL;
 	fe->in = s;
+	fe->mpeg_handle = ptr;
 
 	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
 			fe->adapter, fe->frontend);
@@ -230,18 +246,13 @@ void *acquire_frontend(struct tune s, void *ptr) {
 	}
 	fe->event = ev;
 
-	/* Register this transponder with the MPEG-TS handler */
-	fe->mpeg_handle = ptr;
-
-	g_mutex_lock(&queue_lock);
 	used_fe = g_list_append(used_fe, fe);
-	g_mutex_unlock(&queue_lock);
 
 	// Tell tuning thread to tune
 	struct work *w = g_malloc(sizeof(struct work));
 	w->action = 1;
 	w->fe = fe;
-	g_async_queue_push(tune_work, w);
+	g_async_queue_push(work_queue, w);
 
 	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
 
@@ -263,20 +274,18 @@ fail:
 	return NULL;
 }
 
-void release_frontend(void *ptr) {
+void frontend_release(void *ptr) {
 	struct frontend *fe = ptr;
 	event_del(fe->event);
 	event_free(fe->event);
-	g_mutex_lock(&queue_lock);
 	used_fe = g_list_remove(used_fe, fe);
-	g_mutex_unlock(&queue_lock);
 	struct work *w = g_malloc(sizeof(struct work));
 	w->action = 2;
 	w->fe = fe;
-	g_async_queue_push(tune_work, w);
+	g_async_queue_push(work_queue, w);
 }
 
-void add_frontend(int adapter, int frontend, struct lnb l) {
+void frontend_add(int adapter, int frontend, struct lnb l) {
 	struct frontend *fe = g_slice_alloc0(sizeof(struct frontend));
 	fe->lnb = l;
 	fe->adapter = adapter;

@@ -15,6 +15,6 @@ extern struct evhttp *httpd;
  * @param sid Service ID
  * @param t Transponder to tune to
  */
-extern void add_channel(const char *name, int sid, struct tune t);
+extern void http_add_channel(const char *name, int sid, struct tune t);
 
 #endif

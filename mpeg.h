@@ -8,23 +8,13 @@
 #define MAX_PID 0x2000
 
 /**
- * Register new MPEG-TS handler on new transponder.
- * @return Pointer to an opaque struct referencing this handler
- */
-void *register_transponder(void);
-/**
- * Destroy a MPEG-TS handler.
- * @param handle Handle of the parser to be destroyed
- */
-void unregister_transponder(void *handle);
-/**
  * Callback for new MPEG-TS input data. Called by the frontend module
  * when reading from frontend succeeded and data is ready for parsing.
  * @param handle Handler for this transport stream
  * @param data Pointer to data to be parsed
  * @param len Length of data at "data"
  */
-void handle_input(void *handle, unsigned char *data, size_t len);
+void mpeg_input(void *handle, unsigned char *data, size_t len);
 /**
  * Register new client requesting program "sid". This module will take care of
  * extracting the requested service from the input data stream and generating a
@@ -36,15 +26,18 @@ void handle_input(void *handle, unsigned char *data, size_t len);
  * @param cb Callback to invoke when new data is ready
  * @param timeout_cb Callback to invoke on frontend tune timeout
  * @param ptr Pointer to be passed to the callback when invoked
- * @return Pointer to client handle, to be passed to unregister_client()
+ * @return Pointer to client handle, to be passed to mpeg_unregister()
  */
-void *register_client(struct tune s, void (*cb) (void *, struct evbuffer *),
+void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
 		void (*timeout_cb) (void *), void *ptr);
 /**
  * Deregister a specific client
- * @param ptr Pointer to handle returned by register_client()
+ * @param ptr Pointer to handle returned by mpeg_register()
  */
-void unregister_client(void *ptr);
+void mpeg_unregister(void *ptr);
+/**
+ * Called by the frontend module when tuning times out.
+ */
 void mpeg_notify_timeout(void *handle);
 
 #endif
