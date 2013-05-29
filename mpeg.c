@@ -312,6 +312,7 @@ void mpeg_notify_timeout(void *handle) {
 		}
 		g_slist_free(copy);
 	}
+	logger(LOG_NOTICE, "Switched frontend after timeout");
 }
 
 void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
@@ -336,7 +337,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
 			t->users++;
 			t->clients = g_slist_prepend(t->clients, scb);
 			scb->t = t;
-			logger(LOG_DEBUG, "Transponder already known. New user count: %d",
+			logger(LOG_DEBUG, "New client on known transponder. New client count: %d",
 					t->users);
 			return scb;
 		}
@@ -371,7 +372,6 @@ void mpeg_unregister(void *ptr) {
 	struct transponder *t = scb->t;
 	t->users--;
 	if(!t->users) { // Completely remove transponder
-		logger(LOG_DEBUG, "Last user on transponder quitted, removing transponder");
 		if(t->frontend_handle)
 			frontend_release(t->frontend_handle);
 		for(int i = 0; i < MAX_PID; i++) {
@@ -383,7 +383,6 @@ void mpeg_unregister(void *ptr) {
 		transponders = g_slist_remove(transponders, t);
 		g_slice_free1(sizeof(struct transponder), t);
 	} else { // Only unregister this client
-		logger(LOG_DEBUG, "Deregistering client");
 		/* 
 		 * Iterate over all callbacks and remove this client from them.
 		 * This is extremely expensive, however, disconnects should be
@@ -393,5 +392,7 @@ void mpeg_unregister(void *ptr) {
 			t->pids[i].callback = g_slist_remove(t->pids[i].callback, scb);
 		t->clients = g_slist_remove(t->clients, scb);
 		g_slice_free1(sizeof(struct client), scb);
+		logger(LOG_INFO, "Client quitted, new transponder user count: %d",
+				t->users);
 	}
 }

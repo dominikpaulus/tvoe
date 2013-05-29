@@ -253,8 +253,6 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);
 
-	logger(LOG_DEBUG, "Registering frontend succeeded, returning");
-
 	return fe;
 fail:
 	if(fe->event) {
@@ -275,6 +273,7 @@ fail:
 
 void frontend_release(void *ptr) {
 	struct frontend *fe = ptr;
+	logger(LOG_INFO, "Releasing frontend %d/%d", fe->adapter, fe->frontend);
 	event_del(fe->event);
 	event_free(fe->event);
 	used_fe = g_list_remove(used_fe, fe);

@@ -20,7 +20,6 @@ static void http_closecb(struct evhttp_connection *req, void *ptr) {
 	mpeg_unregister(c->handle);
 	event_del(c->timer);
 	event_free(c->timer);
-	logger(LOG_DEBUG, "Dropping HTTP connection");
 	g_slice_free1(sizeof(struct http_output), ptr);
 }
 
@@ -50,9 +49,9 @@ void http_timeout(void *arg) {
 static void http_callback(struct evhttp_request *req, void *ptr) {
 	struct tune *t = ptr;
 	void *handle;
-	logger(LOG_INFO, "New request for SID %d", t->sid);
-	if(!(handle = mpeg_register(*t, (void (*) (void *, struct evbuffer *)) evhttp_send_reply_chunk, http_timeout, req))) {
-		logger(LOG_NOTICE, "Unable to fulfill request: mpeg_register() failed");
+	if(!(handle = mpeg_register(*t, (void (*) (void *, struct evbuffer *))
+					evhttp_send_reply_chunk, http_timeout, req))) {
+		logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
 		evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
 		return;
 	}
