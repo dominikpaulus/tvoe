@@ -147,7 +147,6 @@ static void *tune_worker(void *ptr) {
 	for(;;) {
 		struct work *w = g_async_queue_pop(work_queue);
 		struct frontend *fe = w->fe;
-		logger(LOG_DEBUG, "Tune thread: New work! :-)");
 		if(w->action == 1)
 			tune_to_fe(fe);
 		else

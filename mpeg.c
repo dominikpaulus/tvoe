@@ -33,6 +33,9 @@ struct client {
 	void *ptr;
 };
 struct pid_info {
+	/** true if we are interested in this PID, i.e., we should parse
+	 * tables transmitted over this PID */
+	bool parse;
 	int8_t last_cc;
 	uint8_t *psi_buffer;
 	uint16_t psi_buffer_used;
@@ -158,33 +161,16 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	int i;
 
 	if(!pat_validate(section)) {
-		//logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
 		free(section);
 		return;
 	}
 
 	psi_table_init(new_pat);
-	if(!psi_table_section(new_pat, section)) {
+	if(!psi_table_section(new_pat, section) || !psi_table_validate(new_pat)
+			|| !pat_table_validate(new_pat)) {
 		psi_table_free(new_pat);
 		return;
 	}
-
-	if(!psi_table_validate(new_pat) ||
-			!pat_table_validate(new_pat)) {
-		psi_table_free(new_pat);
-		return;
-	}
-
-	/*
-	// Don't re-parse already known PATs
-	if(psi_table_validate(a->current_pat) &&
-			psi_table_compare(a->current_pat, new_pat)) {
-		psi_table_free(new_pat);
-		psi_table_init(new_pat);
-		return;
-	}
-	logger(LOG_DEBUG, "New PAT found");
-	*/
 
 	last_section = psi_table_get_lastsection(new_pat);
 	for(i = 0; i <= last_section; i++) {
@@ -200,6 +186,8 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 		 */
 		for(j = 0; (program = pat_get_program(cur, j)); j++) {
 			uint16_t cur_sid = patn_get_program(program);
+
+			a->pids[patn_get_pid(program)].parse = true; // We always parse all PMTs
 
 			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
@@ -238,7 +226,6 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section) {
 	uint8_t table_pid = psi_get_tableid(section);
 	if(!psi_validate(section)) {
-		//logger(LOG_NOTICE, "Invalid section on PID %u\n", pid);
 		free(section);
 		return;
 	}
@@ -278,6 +265,9 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 			evbuffer_add(a->out, cur, TS_SIZE);
 			c->cb(c->ptr, a->out);
 		}
+
+		if(!a->pids[pid].parse)
+			continue;
 
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
 				!ts_has_payload(cur))
@@ -371,6 +361,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
 		t->pids[i].callback = NULL;
 		psi_assemble_init(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 	}
+	t->pids[0].parse = true; // Always parse the PAT
 	transponders = g_slist_prepend(transponders, t);
 	return scb;
 }
