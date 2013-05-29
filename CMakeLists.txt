@@ -9,7 +9,7 @@ include(FindFLEX)
 include(FindPkgConfig)
 find_package(BISON)
 find_package(FLEX)
-find_package(Threads)
+find_path(BITSTREAM_INCLUDE_DIR bitstream/common.h)
 
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 pkg_check_modules(EVENT REQUIRED libevent)
@@ -22,7 +22,8 @@ ADD_FLEX_BISON_DEPENDENCY(ConfigLexer ConfigParser)
 
 INCLUDE_DIRECTORIES($(CMAKE_CURRENT_SOURCE_DIR)
 ${CMAKE_CURRENT_BINARY_DIR}
-${GLIB_INCLUDE_DIRS})
+${GLIB_INCLUDE_DIRS}
+${BITSTREAM_INCLUDE_DIR})
 
 ADD_EXECUTABLE(getstream
 	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
