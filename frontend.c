@@ -19,7 +19,6 @@
 #include "frontend.h"
 
 static GList *idle_fe, *used_fe;
-static pthread_t tune_thread;
 static GMutex queue_lock;
 
 struct frontend {
@@ -160,10 +159,7 @@ void frontend_init(void) {
 	work_queue = g_async_queue_new();
 	g_mutex_init(&queue_lock);
 	/* Start tuning thread */
-	if((errno = pthread_create(&tune_thread, NULL, tune_worker, NULL)) < 0) {
-		logger(LOG_ERR, "pthread_create() failed: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	g_thread_new("tune_worker", tune_worker, NULL);
 }
 
 /* libevent callback for data on dvr fd */
