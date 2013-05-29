@@ -147,7 +147,7 @@ static void *tune_worker(void *ptr) {
 	for(;;) {
 		struct work *w = g_async_queue_pop(work_queue);
 		struct frontend *fe = w->fe;
-		if(w->action == 1)
+		if(w->action == FE_WORK_TUNE)
 			tune_to_fe(fe);
 		else
 			release_fe(fe);
@@ -249,7 +249,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 
 	// Tell tuning thread to tune
 	struct work *w = g_malloc(sizeof(struct work));
-	w->action = 1;
+	w->action = FE_WORK_TUNE;
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);
 
@@ -278,7 +278,7 @@ void frontend_release(void *ptr) {
 	event_free(fe->event);
 	used_fe = g_list_remove(used_fe, fe);
 	struct work *w = g_malloc(sizeof(struct work));
-	w->action = 2;
+	w->action = FE_WORK_RELEASE;
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);
 }
