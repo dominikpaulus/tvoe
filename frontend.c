@@ -150,7 +150,7 @@ static void *tune_worker(void *ptr) {
 			tune_to_fe(fe);
 		else
 			release_fe(fe);
-		g_free(w);
+		g_slice_free(struct work, w);
 	}
 	return NULL;
 }
@@ -244,7 +244,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	used_fe = g_list_append(used_fe, fe);
 
 	// Tell tuning thread to tune
-	struct work *w = g_malloc(sizeof(struct work));
+	struct work *w = g_slice_new(struct work);
 	w->action = FE_WORK_TUNE;
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);
@@ -273,7 +273,7 @@ void frontend_release(void *ptr) {
 	event_del(fe->event);
 	event_free(fe->event);
 	used_fe = g_list_remove(used_fe, fe);
-	struct work *w = g_malloc(sizeof(struct work));
+	struct work *w = g_slice_new(struct work);
 	w->action = FE_WORK_RELEASE;
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);

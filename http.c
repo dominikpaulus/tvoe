@@ -35,6 +35,7 @@ static void http_check_bufsize(evutil_socket_t fd, short what, void *arg) {
 	if(len > 1024 * 1024 * 10 || len2 > 1024 * 1024 * 10) {
 		logger(LOG_ERR, "HTTP overflow");
 		evhttp_send_reply_end(arg);
+		evhttp_connection_free(conn);
 		return;
 	}
 }

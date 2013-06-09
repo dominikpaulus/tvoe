@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 
 project(getstream-sh C)
 
-set(CMAKE_C_FLAGS "${CMAKE_ENABLE_C99} -Wall -g -std=c99 -D_XOPEN_SOURCE=700") 
+set(CMAKE_C_FLAGS "-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
+set(CMAKE_BUILD_TYPE Release)
 
 include(FindBISON)
 include(FindFLEX)
