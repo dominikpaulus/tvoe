@@ -21,6 +21,8 @@
 static GList *idle_fe, *used_fe;
 static GMutex queue_lock;
 
+static void dvr_callback(evutil_socket_t fd, short int flags, void *arg);
+
 struct frontend {
 	struct tune in;		/**< Associated transponder, if applicable */
 	struct lnb lnb;		/**< Attached LNB */
@@ -64,6 +66,39 @@ struct work {
 	struct frontend *fe;
 };
 static GAsyncQueue *work_queue;
+
+/*
+ * Open frontend descriptors
+ */
+static bool open_fe(struct frontend *fe) {
+	char path_fe[512], path_dmx[512], path_dvr[512];
+	/* Open frontend, demuxer and DVR output */
+	snprintf(path_fe, sizeof(path_fe), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
+			fe->frontend);
+	snprintf(path_dmx, sizeof(path_dmx), "/dev/dvb/adapter%d/demux%d", fe->adapter,
+			fe->frontend);
+	snprintf(path_dvr, sizeof(path_dvr), "/dev/dvb/adapter%d/dvr%d", fe->adapter,
+			fe->frontend);
+	if((fe->fe_fd = open(path_fe, O_RDWR | O_NONBLOCK)) < 0 ||
+		(fe->dmx_fd = open(path_dmx, O_RDWR)) < 0 ||
+		(fe->dvr_fd = open(path_dvr, O_RDONLY | O_NONBLOCK)) < 0) {
+		logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
+				fe->frontend, strerror(errno));
+		return false;
+	}
+
+	/* Add libevent callback for TS input */
+	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
+	struct timeval tv = { 10, 0 }; // 10s timeout
+	if(event_add(ev, &tv)) {
+		logger(LOG_ERR, "Adding frontend to libevent failed.");
+		event_free(fe->event);
+		return false;
+	}
+	fe->event = ev;
+
+	return true;
+}
 
 /*
  * Tune previously unkown frontend
@@ -146,9 +181,10 @@ static void *tune_worker(void *ptr) {
 	for(;;) {
 		struct work *w = g_async_queue_pop(work_queue);
 		struct frontend *fe = w->fe;
-		if(w->action == FE_WORK_TUNE)
-			tune_to_fe(fe);
-		else
+		if(w->action == FE_WORK_TUNE) {
+			if(open_fe(fe))
+				tune_to_fe(fe);
+		} else
 			release_fe(fe);
 		g_slice_free(struct work, w);
 	}
@@ -204,43 +240,6 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
 			fe->adapter, fe->frontend);
 
-	char path[512];
-	/* Open frontend... */
-	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
-			fe->frontend);
-	fe->fe_fd = open(path, O_RDWR);
-	if(fe->fe_fd < 0) {
-		logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
-				fe->frontend, strerror(errno));
-		goto fail;
-	}
-
-	/* ...demuxer... */
-	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/demux%d", fe->adapter, fe->frontend);
-	fe->dmx_fd = open(path, O_RDWR);
-	if(fe->dmx_fd < 0) {
-		logger(LOG_ERR, "Failed to open demuxer: %s", strerror(errno));
-		goto fail;
-	}
-
-	/* ...and dvr.*/
-	snprintf(path, sizeof(path), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
-	fe->dvr_fd = open(path, O_RDONLY | O_NONBLOCK);
-	if(!fe->dvr_fd) {
-		logger(LOG_ERR, "Failed to open dvr device for frontend %d/%d",
-				fe->adapter, fe->frontend);
-		goto fail;
-	}
-
-	/* Add libevent callback for TS input */
-	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
-	struct timeval tv = { 10, 0 }; // 10s timeout
-	if(event_add(ev, &tv)) {
-		logger(LOG_ERR, "Adding frontend to libevent failed.");
-		goto fail;
-	}
-	fe->event = ev;
-
 	used_fe = g_list_append(used_fe, fe);
 
 	// Tell tuning thread to tune
@@ -250,21 +249,6 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	g_async_queue_push(work_queue, w);
 
 	return fe;
-fail:
-	if(fe->event) {
-		event_del(fe->event);
-		event_free(fe->event);
-	}
-	if(fe->fe_fd)
-		close(fe->fe_fd);
-	if(fe->dmx_fd)
-		close(fe->dmx_fd);
-	if(fe->dvr_fd)
-		close(fe->dvr_fd);
-	g_mutex_lock(&queue_lock);
-	idle_fe = g_list_append(idle_fe, f);
-	g_mutex_unlock(&queue_lock);
-	return NULL;
 }
 
 void frontend_release(void *ptr) {
