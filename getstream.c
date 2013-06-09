@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <event.h>
+#include <event2/thread.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -42,6 +43,7 @@ int main(int argc, char **argv) {
 	}
 
 	/* Initialize libevent */
+	evthread_use_pthreads();
 	event_init();
 	httpd = evhttp_new(NULL);
 

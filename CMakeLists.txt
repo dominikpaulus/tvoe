@@ -14,6 +14,7 @@ find_path(BITSTREAM_INCLUDE_DIR bitstream/common.h)
 
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 pkg_check_modules(EVENT REQUIRED libevent)
+pkg_check_modules(EVENT-THREAD REQUIRED libevent_pthreads)
 
 BISON_TARGET(ConfigParser config_parser.y
 	${CMAKE_CURRENT_BINARY_DIR}/config_parser.c)
@@ -30,5 +31,5 @@ ADD_EXECUTABLE(getstream
 	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
 	getstream.c http.c frontend.c log.c mpeg.c channels.c)
 TARGET_LINK_LIBRARIES(getstream
-	${EVENT_LIBRARIES} ${GLIB_LIBRARIES}
-	${CMAKE_THREAD_LIBS_INIT})
+	${EVENT_LIBRARIES} ${EVENT-THREAD_LIBRARIES}
+	${GLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
