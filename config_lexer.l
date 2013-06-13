@@ -34,6 +34,8 @@ channels	return CHANNELSCONF;
 logfile		return LOGFILE;
 use_syslog	return USESYSLOG;
 loglevel	return LOGLEVEL;
+client_bufsize return CLIENTBUF;
+demux_bufsize return DMXBUF;
 
 ;			return SEMICOLON;
 [ \t\r\n]+		;

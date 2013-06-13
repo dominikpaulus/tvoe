@@ -5,6 +5,9 @@
 #include "mpeg.h"
 #include "http.h"
 
+/* Client buffer size: Set by config parser */
+int clientbuf = -1;
+
 /* Global handle for the HTTP base used by getstream */
 struct evhttp *httpd;
 
@@ -32,8 +35,8 @@ static void http_check_bufsize(evutil_socket_t fd, short what, void *arg) {
 	struct evhttp_connection *conn = evhttp_request_get_connection(arg);
 	size_t len = evbuffer_get_length(bufferevent_get_output(evhttp_connection_get_bufferevent(conn)));
 	size_t len2 = evbuffer_get_length(evhttp_request_get_output_buffer(arg));
-	if(len > 1024 * 1024 * 10 || len2 > 1024 * 1024 * 10) {
-		logger(LOG_ERR, "HTTP overflow");
+	if(clientbuf >= 0 && (len > clientbuf || len2 > clientbuf)) {
+		logger(LOG_ERR, "HTTP client buffer overflowed, dropping client");
 		evhttp_send_reply_end(arg);
 		evhttp_connection_free(conn);
 		return;

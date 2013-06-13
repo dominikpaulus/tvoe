@@ -18,6 +18,9 @@
 #include "mpeg.h"
 #include "frontend.h"
 
+/* Size of demux buffer. Set by config parser, 0 means default */
+size_t dmxbuf = 0;
+
 static GList *idle_fe, *used_fe;
 static GMutex queue_lock;
 
@@ -163,7 +166,9 @@ static void tune_to_fe(struct frontend *fe) {
 			return;
 		}
 	}
-	ioctl(fe->dmx_fd, DMX_SET_BUFFER_SIZE, 16 * 4096);
+	/* Set demux buffer size, if requested */
+	if(dmxbuf)
+		ioctl(fe->dmx_fd, DMX_SET_BUFFER_SIZE, dmxbuf);
 }
 
 static void release_fe(struct frontend *fe) {

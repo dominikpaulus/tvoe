@@ -17,10 +17,12 @@ extern int yylex(void);
 extern char *logfile;
 extern int use_syslog;
 extern int loglevel;
+extern int clientbuf;
+extern size_t dmxbuf;
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
-static int adapter = -1;
+static int adapter = -1, frontend = -1;
 
 void yyerror(const char *str)
 {
@@ -59,22 +61,32 @@ void init_parser() {
 %token<num> NUMBER
 %token<num> YESNO
 %token SEMICOLON HTTPLISTEN FRONTEND ADAPTER LOF1 LOF2 SLOF CHANNELSCONF
-%token LOGFILE USESYSLOG LOGLEVEL
+%token LOGFILE USESYSLOG LOGLEVEL CLIENTBUF DMXBUF
 
 %%
 
 statements: 
 		    | statements statement SEMICOLON;
-statement: http | frontend | channels | logfile | syslog | loglevel;
+statement: http | frontend | channels | logfile | syslog |
+		 loglevel | clientbuf | dmxbuf;
+
+clientbuf: CLIENTBUF NUMBER {
+	if($2 <= 0)
+		parse_error("Client buffer size must be greater than 0 bytes");
+	clientbuf = $2;
+}
+
+dmxbuf: DMXBUF NUMBER {
+	if($2 <= 0)
+		parse_error("Demuxer buffer size must be greater than 0 bytes");
+	dmxbuf = $2;
+}
 
 loglevel: LOGLEVEL NUMBER {
 	loglevel = $2;
-	if(loglevel < 0 || loglevel > 5) {
+	if(loglevel < 0 || loglevel > 5)
 		parse_error("Loglevel must be between 0 and 5.");
-		exit(EXIT_FAILURE);
-	}
 }
-
 
 logfile: LOGFILE STRING {
 	logfile = strdup($2);
@@ -109,13 +121,16 @@ frontend: FRONTEND '{' frontendoptions '}' {
 		l.lof2 = 10600000;
 	if(!l.slof)
 		l.slof = 11700000;
-	frontend_add(adapter, 0, l);
-	adapter = -1;
+	frontend_add(adapter, frontend, l);
+	adapter = frontend = dmxbuf -1;
 }
 frontendoptions: | frontendoptions frontendoption;
-frontendoption: adapter | lof1 | lof2 | slof;
+frontendoption: adapter | frontend | lof1 | lof2 | slof;
 adapter: ADAPTER NUMBER SEMICOLON {
 	adapter = $2;
+}
+frontend: FRONTEND NUMBER SEMICOLON {
+	frontend = $2;
 }
 lof1: LOF1 NUMBER SEMICOLON {
 	l.lof1 = $2;

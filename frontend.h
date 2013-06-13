@@ -22,6 +22,7 @@ struct tune {
 
 struct lnb {
 	int lof1, lof2, slof;
+	size_t dmxbuf;
 };
 
 /**
