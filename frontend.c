@@ -163,12 +163,15 @@ static void tune_to_fe(struct frontend *fe) {
 			return;
 		}
 	}
+	ioctl(fe->dmx_fd, DMX_SET_BUFFER_SIZE, 16 * 4096);
 }
 
 static void release_fe(struct frontend *fe) {
 	close(fe->fe_fd);
 	close(fe->dmx_fd);
 	close(fe->dvr_fd);
+	event_del(fe->event);
+	event_free(fe->event);
 	g_mutex_lock(&queue_lock);
 	idle_fe = g_list_append(idle_fe, fe);
 	g_mutex_unlock(&queue_lock);
@@ -232,8 +235,6 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	g_mutex_unlock(&queue_lock);
 
 	struct frontend *fe = (struct frontend *) (f->data);
-	fe->dmx_fd = fe->dvr_fd = fe->fe_fd = 0;
-	fe->event = NULL;
 	fe->in = s;
 	fe->mpeg_handle = ptr;
 
@@ -254,8 +255,6 @@ void *frontend_acquire(struct tune s, void *ptr) {
 void frontend_release(void *ptr) {
 	struct frontend *fe = ptr;
 	logger(LOG_INFO, "Releasing frontend %d/%d", fe->adapter, fe->frontend);
-	event_del(fe->event);
-	event_free(fe->event);
 	used_fe = g_list_remove(used_fe, fe);
 	struct work *w = g_slice_new(struct work);
 	w->action = FE_WORK_RELEASE;
