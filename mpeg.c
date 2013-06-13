@@ -9,9 +9,18 @@
 #include "mpeg.h"
 #include "log.h"
 
-/* 
- * A lot of code in this file is based on biTstream examples.
- * TODO: Licensing information.
+/*
+ * This module handles remultiplexing the incoming DVB stream for different
+ * clients, including only the SID (service ID) and associated PIDs requested
+ * by the client.
+ *
+ * It parses the PAT (containing SID to PMT mapping) and PMTs (containing
+ * associated PIDs for the SID this PMT corresponds to) and maintains a list of
+ * clients for each PID.
+ *
+ * Each incoming packet is forwarded to all clients requesting a SID containing
+ * this PID. Also, it regularly sends a PAT containing only the requested SID
+ * to all clients.
  */
 
 /*
@@ -32,11 +41,17 @@ struct client {
 	/** Argument to supply to the callback functions */
 	void *ptr;
 };
+/*
+ * Struct containing information about a given PID (list of callbacks
+ * and buffers used for decoding PAT or PMTs sent on this PID, if
+ * applicable
+ */
 struct pid_info {
 	/** true if we are interested in this PID, i.e., we should parse
 	 * tables transmitted over this PID */
 	bool parse;
 	int8_t last_cc;
+	/* Buffers used by bitstream for decoding psi tables */
 	uint8_t *psi_buffer;
 	uint16_t psi_buffer_used;
 	GSList *callback;
@@ -58,7 +73,8 @@ struct transponder {
 };
 static GSList *transponders;
 
-/* Helper function for send_pat() */
+/* Helper function for send_pat(). Send a PSI section to the client. */
+/* This code is copied from bitstream examples. See LICENSE. */
 static void output_psi_section(struct transponder *a, struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
     uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
     uint16_t section_offset = 0;
@@ -77,12 +93,15 @@ static void output_psi_section(struct transponder *a, struct client *c, uint8_t 
         if (section_offset == section_length)
             psi_split_end(ts, &ts_offset);
 
-
 		evbuffer_add(a->out, ts, TS_SIZE);
 		c->cb(c->ptr, a->out);
     } while (section_offset < section_length);
 }
 
+/*
+ * Assemble new PAT containing only the SID requested by the client and
+ * sent it to him.
+ */
 static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
@@ -110,8 +129,10 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     free(pat);
 }
 
-/* Helper function to register all clients in it as callbacks for PID pid
- * on transponder a */
+/*
+ * Helper function to register all clients in it as callbacks for PID pid
+ * on transponder a
+ */
 static void register_callback(GSList *it, struct transponder *a, uint16_t pid) {
 	// Loop over all supplied clients and add them if requested
 	for(; it; it = g_slist_next(it)) {
@@ -189,15 +210,27 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 
 			a->pids[patn_get_pid(program)].parse = true; // We always parse all PMTs
 
+			/*
+			 * Loop over all registered clients for this transponder.
+			 * This might be expensive, however, PATs are only sent about
+			 * once a second, so this should not hurt.
+			 */
 			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
 				struct client *c = it->data;
 				if(c->sid != cur_sid)
 					continue;
 
-				// Send new PAT to this client
+				/*
+				 * Receiving a new PAT from the uplink triggers sending
+				 * a new, reduced PAT on the remuxed transport
+				 * streams
+				 */
 				send_pat(a, c, cur_sid, patn_get_pid(program));
 
-				/* Check whether callback for PMT is already installed */
+				/*
+				 * If necessary, add this client as callback for the
+				 * referenced PMT.
+				 */
 				GSList *it2;
 				for(it2 = a->pids[patn_get_pid(program)].callback;
 						it2 != NULL; it2 = g_slist_next(it2)) {
@@ -210,7 +243,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 					g_slist_prepend(a->pids[patn_get_pid(program)].callback, c);
 			}
 			//logger(LOG_DEBUG, "%d -> %d", patn_get_program(program),
-			//		patn_get_pid(program)); 
+			//		patn_get_pid(program));
 		}
 	}
 
@@ -249,6 +282,10 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		return;
 	}
 
+	/*
+	 * Loop over all packets, parse PSI tables, if necessary and forward them
+	 * to all requesting clients
+	 */
 	for(int i=0; i < len; i+=TS_SIZE) {
 		uint8_t *cur = data + i;
 		uint16_t pid = ts_get_pid(cur);
@@ -256,8 +293,6 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 
 		if(pid >= MAX_PID - 1)
 			continue;
-
-		// Mostly c&p from biTstream examples
 
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
@@ -269,12 +304,14 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		if(!a->pids[pid].parse)
 			continue;
 
+		/* The following code is based on bitstream examples */
+
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
 				!ts_has_payload(cur))
 			continue;
 		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[pid].last_cc))
 			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
-	
+
 		a->pids[pid].last_cc = ts_get_cc(cur);
 
 		const uint8_t *payload = ts_section(cur);
@@ -299,11 +336,17 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 	}
 }
 
+/*
+ * Called if transponder times out waiting for data
+ */
 void mpeg_notify_timeout(void *handle) {
 	struct transponder *t = handle;
 	frontend_release(t->frontend_handle);
+	/* If possible, acquire new frontend as a replacement */
 	t->frontend_handle = frontend_acquire(t->in, t);
 	if(!t->frontend_handle) {
+		/* No replacement found. Disconnect all clients on this
+		 * transponder */
 		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
 		GSList *copy = g_slist_copy(t->clients);
 		for(GSList *it = copy; it; it = g_slist_next(it)) {
