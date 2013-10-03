@@ -6,7 +6,7 @@
 #include "http.h"
 
 /* Client buffer size: Set by config parser */
-int clientbuf = -1;
+int clientbuf = 10485760;
 
 /* Global handle for the HTTP base used by getstream */
 struct evhttp *httpd;

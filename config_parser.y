@@ -122,7 +122,8 @@ frontend: FRONTEND '{' frontendoptions '}' {
 	if(!l.slof)
 		l.slof = 11700000;
 	frontend_add(adapter, frontend, l);
-	adapter = frontend = dmxbuf -1;
+	adapter = -1;
+	frontend = 0;
 }
 frontendoptions: | frontendoptions frontendoption;
 frontendoption: adapter | frontend | lof1 | lof2 | slof;
