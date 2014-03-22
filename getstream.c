@@ -12,7 +12,8 @@
 
 const char *conffile = "./getstream.conf";
 extern int loglevel;
-bool daemonize = true;
+static bool daemonize = true;
+bool daemonized = false;
 
 extern void yylex_destroy();
 extern void init_lexer();
@@ -69,6 +70,8 @@ int main(int argc, char **argv) {
 			printf("success. (pid: %u)\n", pid);
 			return EXIT_SUCCESS;
 		}
+
+		daemonized = true; // prevents logger from logging to stderr
 		umask(0);
 		if(setsid() < 0) {
 			perror("setsid()");

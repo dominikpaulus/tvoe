@@ -12,7 +12,7 @@ char *logfile = NULL;
 int use_syslog = 0;
 int loglevel = 1;
 static FILE * log_fd;
-extern bool daemonize;
+extern bool daemonized;
 
 void logger(int level, char *fmt, ...) {
 	char text[2048], tv[256];
@@ -36,7 +36,7 @@ void logger(int level, char *fmt, ...) {
 	}
 	if(use_syslog)
 		syslog(level, "%s", text);
-	if(!daemonize)
+	if(!daemonized)
 		fprintf(stderr, "%s %s\n", tv, text);
 }
 
