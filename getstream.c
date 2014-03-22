@@ -57,6 +57,10 @@ int main(int argc, char **argv) {
 	/* Initialize logging subsystem */
 	init_log();
 
+	/* Initialize frontend handler */
+	if(frontend_init() == false)
+		return EXIT_FAILURE;
+
 	// Daemonize if necessary
 	if(daemonize && getppid() != 1) {
 		printf("Daemonizing... ");
@@ -94,9 +98,6 @@ int main(int argc, char **argv) {
 		action.sa_handler = SIG_IGN;
 		sigaction(SIGPIPE, &action, NULL);
 	}
-
-	/* Initialize frontend handler*/
-	frontend_init();
 
 	event_dispatch();
 
