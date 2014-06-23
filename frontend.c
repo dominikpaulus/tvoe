@@ -198,6 +198,7 @@ static void *tune_worker(void *ptr) {
 }
 
 bool frontend_init(void) {
+#if 0
 	/* Open all frontends on startup once to check for sanity */
 	bool error = false;
 	struct frontend *fe;
@@ -210,6 +211,7 @@ bool frontend_init(void) {
 	}
 	if(error)
 		return false;
+#endif
 
 	work_queue = g_async_queue_new();
 	g_mutex_init(&queue_lock);
