@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-project(getstream-sh C)
+project(yatvss C)
 
 set(CMAKE_C_FLAGS "-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
 set(CMAKE_BUILD_TYPE Release)
@@ -27,9 +27,9 @@ ${CMAKE_CURRENT_BINARY_DIR}
 ${GLIB_INCLUDE_DIRS}
 ${BITSTREAM_INCLUDE_DIR})
 
-ADD_EXECUTABLE(getstream
+ADD_EXECUTABLE(yatvss
 	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
-	getstream.c http.c frontend.c log.c mpeg.c channels.c)
-TARGET_LINK_LIBRARIES(getstream
+	yatvss.c http.c frontend.c log.c mpeg.c channels.c)
+TARGET_LINK_LIBRARIES(yatvss
 	${EVENT_LIBRARIES} ${EVENT-THREAD_LIBRARIES}
 	${GLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

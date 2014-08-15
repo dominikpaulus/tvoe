@@ -48,7 +48,7 @@ int init_log(void) {
 					strerror(errno));
 	}
 	if(use_syslog)
-		openlog("getstream-sh", 0, LOG_DAEMON);
-	logger(LOG_INFO, "getstream-sh starting");
+		openlog("yatvss", 0, LOG_DAEMON);
+	logger(LOG_INFO, "yatvss starting");
 	return 0;
 }
