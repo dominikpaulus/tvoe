@@ -15,7 +15,7 @@
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 DAEMON=/usr/bin/yatvss
 PIDFILE=/var/run/yatvss.pid
-RUNASUSER=yatvss
+USER=yatvss
 
 test -x $DAEMON || exit 0
 
@@ -24,12 +24,13 @@ test -x $DAEMON || exit 0
 case "$1" in
   start)
 	log_daemon_msg "Starting DVB-S/S2 streaming server" "yatvss"
-	start_daemon -p $PIDFILE $DAEMON -c /etc/yatvss/yatvss.conf
+	start-stop-daemon --start --make-pidfile --pidfile $PIDFILE --quiet \
+		--background --exec $DAEMON --chuid $USER -- -c /etc/yatvss/yatvss.conf -f
 	log_end_msg $?
     ;;
   stop)
 	log_daemon_msg "Stopping DVB-S/S2 streaming server" "yatvss"
-	killproc -p $PIDFILE $DAEMON
+	start-stop-daemon --stop --retry 30 --name yatvss --pidfile $PIDFILE >/dev/null
 	log_end_msg $?
     ;;
   force-reload|restart)
