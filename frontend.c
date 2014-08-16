@@ -197,28 +197,11 @@ static void *tune_worker(void *ptr) {
 	return NULL;
 }
 
-bool frontend_init(void) {
-#if 0
-	/* Open all frontends on startup once to check for sanity */
-	bool error = false;
-	struct frontend *fe;
-	for(GList *ptr = g_list_first(idle_fe); ptr != NULL; ptr = g_list_next(ptr)) {
-		fe = ptr->data;
-		if(open_fe(fe) == false)
-			error = true;
-		else
-			release_fe(fe);
-	}
-	if(error)
-		return false;
-#endif
-
+void frontend_init(void) {
 	work_queue = g_async_queue_new();
 	g_mutex_init(&queue_lock);
 	/* Start tuning thread */
 	g_thread_new("tune_worker", tune_worker, NULL);
-
-	return true;
 }
 
 /* libevent callback for data on dvr fd */

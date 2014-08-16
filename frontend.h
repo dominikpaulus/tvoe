@@ -52,8 +52,7 @@ void frontend_release(void *ptr);
 void frontend_add(int adapter, int frontend, struct lnb l);
 /**
  * Initialize the frontend management subsystem
- * @return false if one or more frontends failed to open, true otherwise
  */
-bool frontend_init(void);
+void frontend_init(void);
 
 #endif

@@ -57,10 +57,6 @@ int main(int argc, char **argv) {
 	/* Initialize logging subsystem */
 	init_log();
 
-	/* Initialize frontend handler */
-	if(frontend_init() == false)
-		return EXIT_FAILURE;
-
 	// Daemonize if necessary
 	if(daemonize && getppid() != 1) {
 		printf("Daemonizing... ");
@@ -89,6 +85,9 @@ int main(int argc, char **argv) {
 		freopen("/dev/null", "w", stdout);
 		freopen("/dev/null", "w", stderr);
 	}
+
+	/* Initialize frontend handler */
+	frontend_init();
 
 	/* Ignore SIGPIPE */
 	{
