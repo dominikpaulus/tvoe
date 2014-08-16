@@ -3,7 +3,8 @@
 set -e
 
 if [ "$1" = "configure" ]; then
-	adduser --system --quiet --ingroup video --no-create-home yatvss
+	adduser --system --quiet --ingroup video --no-create-home yatvss \
+		--home /run/yatvss --disabled-password
 fi
 
 #DEBHELPER#
