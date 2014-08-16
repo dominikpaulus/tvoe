@@ -4,6 +4,4 @@
 	dh $@
 
 override_dh_auto_install:
-	install -D -m 755 debian-init debian/yatvss/etc/init.d/yatvss
-	install -D yatvss.conf.example debian/yatvss/etc/yatvss/yatvss.conf
-	dh_installinit --name=yatvss
+	install -m 644 -D yatvss.conf.example debian/yatvss/etc/yatvss/yatvss.conf
