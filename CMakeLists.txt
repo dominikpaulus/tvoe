@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project(yatvss C)
 
-set(CMAKE_C_FLAGS "-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
+add_definitions("-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
 set(CMAKE_BUILD_TYPE Release)
 
 include(FindBISON)
