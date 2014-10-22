@@ -15,7 +15,7 @@
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 DAEMON=/usr/bin/tvoe
 PIDFILE=/var/run/tvoe.pid
-USER=tvoe
+USER=Debian-tvoe
 
 test -x $DAEMON || exit 0
 
