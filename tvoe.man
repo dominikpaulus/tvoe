@@ -43,6 +43,12 @@ Display a short usage summary
 \fB\-c config\fR
 Use the specified config 
 .TP
+\fB\--p pidfile\fR
+Write process PID to given pidfile
+.TP
+\fB\--q\fR
+(quiet) - don't write debug output to stdout when starting.
+.TP
 \fB\-f\fR
 Start tvoe as a foreground process and disable forking to the background.
 

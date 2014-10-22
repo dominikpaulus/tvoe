@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <errno.h>
 #include <signal.h>
 #include "http.h"
 #include "log.h"
@@ -22,10 +25,10 @@ extern int yyparse(void);
 
 int main(int argc, char **argv) {
 	int c;
+	char *pidfile = NULL;
+	bool quiet = false;
 
-	printf("tvoe version %s compiled on %s %s\n", "0.1", __DATE__, __TIME__);
-
-	while((c = getopt(argc, argv, "hfd:c:")) != -1) {
+	while((c = getopt(argc, argv, "qhfd:c:p:")) != -1) {
 		switch(c) {
 			case 'c': // Config filename
 				conffile = optarg;
@@ -33,15 +36,26 @@ int main(int argc, char **argv) {
 			case 'f': // Foreground
 				daemonize = false;
 				break;
+			case 'p': // Pidfile
+				pidfile = optarg;
+				break;
+			case 'q': // Quiet
+				quiet = true;
+				break;
 			case 'h':
 			default:
-				fprintf(stderr, "Usage: %s [-c config] [-f] [-h]\n"
+				fprintf(stderr, "Usage: %s [-c config] [-f] [-h] [-p pidfile]\n"
 						"\t-c: Sets configuration file path. Default: ./tvoe.conf\n"
 						"\t-f: Disable daemon fork\n"
+						"\t-p: Write PID to given pidfile\n"
+						"\t-q: Quiet startup\n"
 						"\t-h: Show this help\n", argv[0]);
 				exit(EXIT_FAILURE);
 		}
 	}
+
+	if(!quiet)
+		printf("tvoe version %s compiled on %s %s\n", "0.1", __DATE__, __TIME__);
 
 	/* Initialize libevent */
 	evthread_use_pthreads();
@@ -59,7 +73,8 @@ int main(int argc, char **argv) {
 
 	// Daemonize if necessary
 	if(daemonize && getppid() != 1) {
-		printf("Daemonizing... ");
+		if(!quiet)
+			printf("Daemonizing... ");
 		fflush(stdout);
 		pid_t pid = fork();
 		if(pid < 0) {
@@ -67,8 +82,30 @@ int main(int argc, char **argv) {
 			return EXIT_FAILURE;
 		}
 		if(pid > 0) {// Exit parent
-			printf("success. (pid: %u)\n", pid);
+			if(!quiet)
+				printf("success. (pid: %u)\n", pid);
 			return EXIT_SUCCESS;
+		}
+
+		if(pidfile) {
+			int pidfd = open(pidfile, O_RDWR | O_CREAT, 0600);
+			char pid[8]; // PID is not greater than 65536
+			if(pidfd < 0) {
+				logger(LOG_ERR, "Unable to open PID file %s: %s, exiting",
+						pidfile, strerror(errno));
+				return EXIT_FAILURE;
+			}
+			if(lockf(pidfd, F_TLOCK, 0) < 0) {
+				logger(LOG_ERR, "Unable to lock PID file %s. tvoe is probably already running.",
+						pidfile);
+				return EXIT_FAILURE;
+			}
+			snprintf(pid, 8, "%d\n", getpid());
+			if(write(pidfd, pid, strlen(pid)) != strlen(pid)) {
+				logger(LOG_ERR, "Unable to write to PID file %s: %s",
+						pidfile, pidfile);
+				return EXIT_FAILURE;
+			}
 		}
 
 		daemonized = true; // prevents logger from logging to stderr
