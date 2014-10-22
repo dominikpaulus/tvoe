@@ -4,4 +4,4 @@
 	dh $@
 
 override_dh_auto_install:
-	install -m 644 -D yatvss.conf.example debian/yatvss/etc/yatvss/yatvss.conf
+	install -m 644 -D tvoe.conf.example debian/tvoe/etc/tvoe/tvoe.conf

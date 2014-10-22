@@ -3,8 +3,8 @@
 set -e
 
 if [ "$1" = "configure" ]; then
-	adduser --system --quiet --ingroup video --no-create-home yatvss \
-		--home /run/yatvss --disabled-password
+	adduser --system --quiet --ingroup video --no-create-home tvoe \
+		--home /run/tvoe --disabled-password
 fi
 
 #DEBHELPER#

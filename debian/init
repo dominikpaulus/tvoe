@@ -1,21 +1,21 @@
 #! /bin/sh
 ### BEGIN INIT INFO
-# Provides:          yatvss
+# Provides:          tvoe
 # Required-Start:    $syslog $time $remote_fs
 # Required-Stop:     $syslog $time $remote_fs
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: DVB-S/S2 streaming server
-# Description:       Debian init script for the yatvss DVB streaming server
+# Description:       Debian init script for the tvoe DVB streaming server
 ### END INIT INFO
 #
 # Author:	Dominik Paulus <iridium@sieglitzhof.net>
 #
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
-DAEMON=/usr/bin/yatvss
-PIDFILE=/var/run/yatvss.pid
-USER=yatvss
+DAEMON=/usr/bin/tvoe
+PIDFILE=/var/run/tvoe.pid
+USER=tvoe
 
 test -x $DAEMON || exit 0
 
@@ -23,14 +23,14 @@ test -x $DAEMON || exit 0
 
 case "$1" in
   start)
-	log_daemon_msg "Starting DVB-S/S2 streaming server" "yatvss"
+	log_daemon_msg "Starting DVB-S/S2 streaming server" "tvoe"
 	start-stop-daemon --start --make-pidfile --pidfile $PIDFILE --quiet \
-		--background --exec $DAEMON --chuid $USER -- -c /etc/yatvss/yatvss.conf -f
+		--background --exec $DAEMON --chuid $USER -- -c /etc/tvoe/tvoe.conf -f
 	log_end_msg $?
     ;;
   stop)
-	log_daemon_msg "Stopping DVB-S/S2 streaming server" "yatvss"
-	start-stop-daemon --stop --retry 30 --name yatvss --pidfile $PIDFILE >/dev/null
+	log_daemon_msg "Stopping DVB-S/S2 streaming server" "tvoe"
+	start-stop-daemon --stop --retry 30 --name tvoe --pidfile $PIDFILE >/dev/null
 	log_end_msg $?
     ;;
   force-reload|restart)
@@ -38,10 +38,10 @@ case "$1" in
     $0 start
     ;;
   status)
-    status_of_proc -p $PIDFILE $DAEMON yatvss && exit 0 || exit $?
+    status_of_proc -p $PIDFILE $DAEMON tvoe && exit 0 || exit $?
     ;;
   *)
-    echo "Usage: /etc/init.d/atd {start|stop|restart|force-reload|status}"
+    echo "Usage: /etc/init.d/tvoe {start|stop|restart|force-reload|status}"
     exit 1
     ;;
 esac

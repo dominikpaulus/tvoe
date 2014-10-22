@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-project(yatvss C)
+project(tvoe C)
 
 add_definitions("-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
 set(CMAKE_BUILD_TYPE Release)
@@ -27,9 +27,9 @@ ${CMAKE_CURRENT_BINARY_DIR}
 ${GLIB_INCLUDE_DIRS}
 ${BITSTREAM_INCLUDE_DIR})
 
-ADD_EXECUTABLE(yatvss
+ADD_EXECUTABLE(tvoe
 	${BISON_ConfigParser_OUTPUTS} ${FLEX_ConfigLexer_OUTPUTS}
-	yatvss.c http.c frontend.c log.c mpeg.c channels.c)
-TARGET_LINK_LIBRARIES(yatvss
+	tvoe.c http.c frontend.c log.c mpeg.c channels.c)
+TARGET_LINK_LIBRARIES(tvoe
 	${EVENT_LIBRARIES} ${EVENT-THREAD_LIBRARIES}
 	${GLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

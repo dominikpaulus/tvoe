@@ -5,5 +5,5 @@ set -e
 #DEBHELPER#
 
 if [ "$1" = "purge" ]; then
-	deluser --system --quiet yatvss || true
+	deluser --system --quiet tvoe || true
 fi

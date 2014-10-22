@@ -48,7 +48,7 @@ int init_log(void) {
 					strerror(errno));
 	}
 	if(use_syslog)
-		openlog("yatvss", 0, LOG_DAEMON);
-	logger(LOG_INFO, "yatvss starting");
+		openlog("tvoe", 0, LOG_DAEMON);
+	logger(LOG_INFO, "tvoe starting");
 	return 0;
 }

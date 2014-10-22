@@ -8,7 +8,7 @@
 /* Client buffer size: Set by config parser */
 int clientbuf = 10485760;
 
-/* Global handle for the HTTP base used by getstream */
+/* Global handle for the HTTP base used by tvoe */
 struct evhttp *httpd;
 
 struct http_output {

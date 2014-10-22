@@ -1,10 +1,10 @@
 # Specify HTTP listener port
-# At the moment, only one port per getstream instance is supported.
+# At the moment, only one port per tvoe instance is supported.
 http-listen 8080;
 
 # List of channels to serve, in "zap" file format.
 # (NAME:FREQUENCY:POLARIZATION:UNUSED:SYMBOLRATE:UNUSED:UNUSED:SID:DELIVERY_SYSTEM)
-channels "channels.conf";
+channels "/etc/tvoe/channels.conf";
 
 # Set the HTTP output buffer size (optional). Clients that
 # exceed this bufsize will be dropped.
@@ -33,7 +33,7 @@ frontend {
 };
 
 # Set logfile (optional)
-logfile "getstream.log";
+logfile "tvoe.log";
 
 # Log to syslog? (Optional)
 use_syslog yes;

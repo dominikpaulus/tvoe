@@ -10,7 +10,7 @@
 #include "http.h"
 #include "log.h"
 
-const char *conffile = "./yatvss.conf";
+const char *conffile = "./tvoe.conf";
 extern int loglevel;
 static bool daemonize = true;
 bool daemonized = false;
@@ -23,7 +23,7 @@ extern int yyparse(void);
 int main(int argc, char **argv) {
 	int c;
 
-	printf("yatvss version %s compiled on %s %s\n", "0.1", __DATE__, __TIME__);
+	printf("tvoe version %s compiled on %s %s\n", "0.1", __DATE__, __TIME__);
 
 	while((c = getopt(argc, argv, "hfd:c:")) != -1) {
 		switch(c) {
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 			case 'h':
 			default:
 				fprintf(stderr, "Usage: %s [-c config] [-f] [-h]\n"
-						"\t-c: Sets configuration file path. Default: ./yatvss.conf\n"
+						"\t-c: Sets configuration file path. Default: ./tvoe.conf\n"
 						"\t-f: Disable daemon fork\n"
 						"\t-h: Show this help\n", argv[0]);
 				exit(EXIT_FAILURE);
