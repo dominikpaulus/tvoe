@@ -10,7 +10,7 @@ Build-Depends: debhelper (>= 7.0.50~),
  libbitstream-dev,
  flex,
  bison
-Standards-Version: 3.9.1
+Standards-Version: 3.9.6
 
 Package: tvoe
 Architecture: any
