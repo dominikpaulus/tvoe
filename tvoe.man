@@ -1,0 +1,58 @@
+.TH tvoe 1 tvoe
+.SH NAME
+tvoe \- TV over ethernet streaming
+.SH SYNOPSIS
+.B tvoe [\fB\-h\fP] [\fB\-c config\fP] [\fB\-f\fP]
+.SH DESCRIPTION
+tvoe (TV over Ethernet streaming server) is a lightweight DVB-S/S2 network
+streaming software. It can serve many transponders on multiple tuners
+simultaneously and provides dynamic tuner allocation to the clients, giving you
+the possibility to add more stations to the channel list than the tuner configuration
+would be able to stream simultaneously.
+
+tvoe is designed for a homogenous tuner configuration, i.e., if you are
+including DVB-S2-channels in your channel list, all configured tuners should
+be able to be S2-capable. Also, tvoe only supports S2API for tuner
+configuration. Some legacy systems and DVB-S1-only-drivers might not support
+S2API and thus cannot be used with tvoe.
+
+tvoe uses the same format for channel lists as the zap(1) utility from dvb-tools.
+They can be easily generated using scan, wscan or other utilities supporting the
+zap file format. For example, to generate a channel list of all channels on
+Astra 19.2E (mostly relevant for central Europe), you can do
+
+scan /usr/share/dvb/dvb-s/Astra-19.2E > channels.conf
+
+All channels listed in the channels.conf will be served by tvoe. If
+necessary, remove unused channels from the list before using it.
+
+Next, adjust the example config file to match your tuner configuration. Make
+sure to set the correct path to the channel list. You can then start tvoe
+using tvoe -f CONFIGFILE
+
+The streams can then be accessed via http://IP:CONFIGURED_PORT/by-sid/SID,
+where SID is the DVB service ID of the requested station (the second-last
+column in the channel specification in channels.conf). Additional URLs
+might be added in the future.
+
+.SH OPTIONS
+.TP
+\fB\-h\fR
+Display a short usage summary
+.TP
+\fB\-c config\fR
+Use the specified config 
+.TP
+\fB\-f\fR
+Start tvoe as a foreground process and disable forking to the background.
+
+.SH AUTHORS
+tvoe is written by Dominik Paulus, inspired by the classic getstream utility
+but designed for greater flexibility by not using a fixed transponder
+configuration.
+
+.SH COPYRIGHT
+Copyright (c) 2013-2014 Dominik Paulus. License: ISC license.
+
+.SH BUGS
+At the moment, tvoe only supports S2API, even for normal DVB-S-streams.
