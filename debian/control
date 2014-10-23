@@ -2,7 +2,9 @@ Source: tvoe
 Section: utils
 Priority: optional
 Maintainer: Dominik Paulus <iridium@sieglitzhof.net>
-Build-Depends: debhelper (>= 7.0.50~),
+Uploaders: Christoph Egger <christoph@debian.org>
+Build-Depends:
+ debhelper (>= 9~),
  cmake,
  libevent-dev,
  libglib2.0-dev,
