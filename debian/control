@@ -13,6 +13,7 @@ Build-Depends:
  flex,
  bison
 Standards-Version: 3.9.6
+Vcs-Git: git://git.faui2k11.de/tvoe.git
 
 Package: tvoe
 Architecture: any
