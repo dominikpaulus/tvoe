@@ -71,6 +71,9 @@ int main(int argc, char **argv) {
 	/* Initialize logging subsystem */
 	init_log();
 
+	if(!quiet)
+		logger(LOG_INFO, "tvoe starting");
+
 	// Daemonize if necessary
 	if(daemonize && getppid() != 1) {
 		if(!quiet)

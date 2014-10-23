@@ -49,6 +49,5 @@ int init_log(void) {
 	}
 	if(use_syslog)
 		openlog("tvoe", 0, LOG_DAEMON);
-	logger(LOG_INFO, "tvoe starting");
 	return 0;
 }
