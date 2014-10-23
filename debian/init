@@ -43,7 +43,7 @@ case "$1" in
     $0 start
     ;;
   status)
-    status_of_proc -p $PIDFILE $DAEMON tvoe && exit 0 || exit $?
+    status_of_proc -p $PIDDIR/tvoe.pid $DAEMON tvoe && exit 0 || exit $?
     ;;
   *)
     echo "Usage: /etc/init.d/tvoe {start|stop|restart|force-reload|status}"
