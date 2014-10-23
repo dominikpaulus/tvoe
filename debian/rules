@@ -5,4 +5,3 @@
 
 override_dh_auto_install:
 	install -m 644 -D tvoe.conf.example debian/tvoe/etc/tvoe/tvoe.conf
-	install -m 644 -D tvoe.man debian/tmp/usr/share/man/man1/tvoe.1
