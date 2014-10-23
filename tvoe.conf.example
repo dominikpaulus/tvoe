@@ -33,7 +33,7 @@ frontend {
 };
 
 # Set logfile (optional)
-logfile "tvoe.log";
+#logfile "tvoe.log";
 
 # Log to syslog? (Optional)
 use_syslog yes;

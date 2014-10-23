@@ -14,23 +14,28 @@
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 DAEMON=/usr/bin/tvoe
-PIDFILE=/var/run/tvoe.pid
+PIDDIR=/var/run/tvoe
 USER=Debian-tvoe
 
 test -x $DAEMON || exit 0
 
 . /lib/lsb/init-functions
 
+if [ ! -d $PIDDIR ]; then
+	mkdir "$PIDDIR"
+	chown $USER "$PIDDIR"
+fi
+
 case "$1" in
   start)
 	log_daemon_msg "Starting DVB-S/S2 streaming server" "tvoe"
-	start-stop-daemon --start --make-pidfile --pidfile $PIDFILE --quiet \
-		--background --exec $DAEMON --chuid $USER -- -c /etc/tvoe/tvoe.conf -f
+	start-stop-daemon --start --pidfile $PIDDIR/tvoe.pid --quiet \
+		--exec $DAEMON --chuid $USER -- -c /etc/tvoe/tvoe.conf -p $PIDDIR/tvoe.pid -q
 	log_end_msg $?
     ;;
   stop)
 	log_daemon_msg "Stopping DVB-S/S2 streaming server" "tvoe"
-	start-stop-daemon --stop --retry 30 --name tvoe --pidfile $PIDFILE >/dev/null
+	start-stop-daemon --stop --retry 30 --name tvoe --pidfile $PIDDIR/tvoe.pid >/dev/null
 	log_end_msg $?
     ;;
   force-reload|restart)
