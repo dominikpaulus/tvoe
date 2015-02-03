@@ -35,7 +35,7 @@ struct client {
 	/** Associated transponder */
 	struct transponder *t;
 	/** Callback for MPEG-TS input */
-	void (*cb) (void *, struct evbuffer *);
+	void (*cb) (void *, uint8_t *, uint16_t);
 	/** Callback to call on timeout */
 	void (*timeout_cb) (void *);
 	/** Argument to supply to the callback functions */
@@ -93,8 +93,7 @@ static void output_psi_section(struct transponder *a, struct client *c, uint8_t 
         if (section_offset == section_length)
             psi_split_end(ts, &ts_offset);
 
-		evbuffer_add(a->out, ts, TS_SIZE);
-		c->cb(c->ptr, a->out);
+		c->cb(c->ptr, ts, TS_SIZE);
     } while (section_offset < section_length);
 }
 
@@ -301,9 +300,7 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
 			struct client *c = it->data;
-			//evbuffer_add(a->out, cur, TS_SIZE);
-			//logger(LOG_DEBUG, "Calling callback!");
-			//c->cb(c->ptr, a->out);
+			c->cb(c->ptr, cur, TS_SIZE);
 		}
 
 		if(!a->pids[pid].parse)
@@ -363,7 +360,7 @@ void mpeg_notify_timeout(void *handle) {
 	logger(LOG_NOTICE, "Switched frontend after timeout");
 }
 
-void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
+void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
 		void (*timeout_cb) (void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
@@ -397,6 +394,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, struct evbuffer *),
 	if(!t->frontend_handle) { // Unable to acquire frontend
 		g_slice_free1(sizeof(struct transponder), t);
 		g_slice_free1(sizeof(struct client), scb);
+		logger(LOG_NOTICE, "Unable to allocate new frontend.");
 		return NULL;
 	}
 	t->in = s;

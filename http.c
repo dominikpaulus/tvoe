@@ -6,13 +6,15 @@
 #include <event.h>
 #include <event2/http.h>
 #include <unistd.h>
+#include <assert.h>
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
 #include "http.h"
 
 /* Client buffer size: Set by config parser */
-int clientbuf = 10485760;
+#define TS_SIZE 188
+#define CLIENTBUF 8192 * TS_SIZE
 
 /* Handle for the HTTP base used by tvoe */
 //struct evhttp *httpd;
@@ -35,70 +37,18 @@ struct http_output {
 struct client {
 	evutil_socket_t fd;
 	struct event *readev, *writeev;
+
+	/* For input line reading */
 	int readpending, readoff;
 	char buf[512];
+
 	char clientname[INET6_ADDRSTRLEN];
 	void *mpeg_handle;
+
+	/* Client output buffer and read/insert position */
+	char writebuf[CLIENTBUF];
+	int cb_inptr, cb_outptr, fill;
 };
-
-// Called by libevent on connection close
-static void http_closecb(struct evhttp_connection *req, void *ptr) {
-	struct http_output *c = (struct http_output *) ptr;
-	mpeg_unregister(c->handle);
-	event_del(c->timer);
-	event_free(c->timer);
-	g_slice_free1(sizeof(struct http_output), ptr);
-	logger(LOG_DEBUG, "Closing connection");
-}
-
-/* 
- * Invoked every second to make sure our buffers don't overflow.
- * We don't do this on every packet sent to save CPU time, thus,
- * we need a timer.
- */
-static void http_check_bufsize(evutil_socket_t fd, short what, void *arg) {
-	struct evhttp_connection *conn = evhttp_request_get_connection(arg);
-	size_t len = evbuffer_get_length(bufferevent_get_output(evhttp_connection_get_bufferevent(conn)));
-	size_t len2 = evbuffer_get_length(evhttp_request_get_output_buffer(arg));
-	logger(LOG_DEBUG, "check_bufsize() called");
-	logger(LOG_DEBUG, "Bufsize: %d, %d", len, len2);
-	if(clientbuf >= 0 && (len > clientbuf || len2 > clientbuf)) {
-		logger(LOG_ERR, "HTTP client buffer overflowed, dropping client");
-		evhttp_send_reply_end(arg);
-		evhttp_connection_free(conn);
-		return;
-	}
-}
-
-void http_timeout(void *arg) {
-	evhttp_send_reply_end(arg);
-}
-
-/*
- * Invoked by libevent when new HTTP request is received
- */
-static void http_callback(struct evhttp_request *req, void *ptr) {
-	struct tune *t = ptr;
-	void *handle;
-	if(!(handle = mpeg_register(*t, (void (*) (void *, struct evbuffer *))
-					evhttp_send_reply_chunk, http_timeout, req))) {
-		logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
-		evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
-		return;
-	}
-	logger(LOG_DEBUG, "New request!");
-	struct http_output *c = g_slice_new(struct http_output);
-	c->handle = handle;
-	c->t = t;
-
-	evhttp_send_reply_start(req, 200, "OK");
-	evhttp_connection_set_closecb(evhttp_request_get_connection(req), http_closecb, c);
-
-	/* Add bufsize timer */
-	c->timer = event_new(NULL, -1, EV_PERSIST, http_check_bufsize, req);
-	struct timeval tv = { 1, 0 };
-	event_add(c->timer, &tv);
-}
 
 void http_add_channel(const char *name, int sid, struct tune t) {
 	char text[128];
@@ -110,6 +60,7 @@ void http_add_channel(const char *name, int sid, struct tune t) {
 }
 
 static void terminate_client(struct client *c) {
+	logger(LOG_INFO, "[%s] Terminating connection", c->clientname);
 	event_del(c->readev);
 	event_del(c->writeev);
 	event_free(c->readev);
@@ -119,8 +70,31 @@ static void terminate_client(struct client *c) {
 	g_slice_free1(sizeof(struct client), c);
 }
 
+static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
+	struct client *c = (struct client *) p;
+	if(c->fill + bufsize > CLIENTBUF) {
+		logger(LOG_INFO, "[%s] Client buffer overrun, terminating connection", c->clientname);
+		terminate_client(c);
+		return;
+	}
+	if(CLIENTBUF - c->cb_inptr <= bufsize) {
+		/* Wraparound */
+		int a = CLIENTBUF - c->cb_inptr;
+		memcpy(c->writebuf + c->cb_inptr, buf, a);
+		int b = bufsize - a;
+		memcpy(c->writebuf, buf + a, b);
+		c->cb_inptr = b;
+	} else {
+		/* Fits directly */
+		memcpy(c->writebuf + c->cb_inptr, buf, bufsize);
+		c->cb_inptr += bufsize;
+	}
+	c->fill += bufsize;
+	event_add(c->writeev, NULL);
+}
+
 static void handle_readev(evutil_socket_t fd, short events, void *p) {
-	logger(LOG_DEBUG, "readev() called");
+	//logger(LOG_DEBUG, "readev() called");
 	struct client *c = (struct client *) p;
 	int ret = recv(fd, c->buf + c->readoff, sizeof(c->buf) - c->readoff - 1, 0);
 	if(ret < 0)
@@ -131,6 +105,8 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	}
 	/* Read error, terminated connection or no proper client request */
 	if(ret <= 0 || c->readoff == sizeof(c->buf) - 1) {
+		if(ret < 0)
+			logger(LOG_INFO, "[%s] Read error: %s", c->clientname, strerror(errno));
 		terminate_client(c);
 		return;
 	}
@@ -148,22 +124,49 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		return;
 	}
 	/* Add client to callback list */
-	logger(LOG_DEBUG, "Client %s requested URL %s", c->clientname, url);
+	logger(LOG_DEBUG, "[%s] Requesting %s", c->clientname, url);
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))
 			continue;
-		logger(LOG_DEBUG, "Found URL");
+		logger(LOG_DEBUG, "Found requested URL");
+		/* Register this client with the MPEG module */
+		if(!(c->mpeg_handle = mpeg_register(u->t, client_senddata, (void (*) (void *)) terminate_client, c))) {
+			logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
+			/* TODO: Send meaningful reply */
+			terminate_client(c);
+			//evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
+		}
+		return;
 	}
 	logger(LOG_INFO, "Client %s requested invalid URL %s, terminating connection", c->clientname, url);
 	terminate_client(c);
 }
 
+static int min(int a, int b) {
+	return a < b ? a : b;
+}
 static void handle_writeev(evutil_socket_t fd, short events, void *p) {
+	struct client *c = (struct client *) p;
+	int tosend = min(c->fill, CLIENTBUF - c->cb_outptr);
+	ssize_t res = send(fd, c->writebuf + c->cb_outptr, tosend, 0);
+	if(res < 0) {
+		if(errno == EAGAIN)
+			return;
+		logger(LOG_NOTICE, "[%s] Send error, terminating connection (%s)", c->clientname, strerror(errno));
+		terminate_client(c);
+		return;
+	}
+	c->cb_outptr += res;
+	c->fill -= res;
+	if(c->cb_outptr == CLIENTBUF)
+		c->cb_outptr = 0;
+	if(c->fill)
+		event_add(c->writeev, NULL);
 }
 
 void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
-	logger(LOG_DEBUG, "New connection");
+	//logger(LOG_DEBUG, "New connection on socket");
 	struct sockaddr addr;
 	socklen_t addrlen;
 	int clientsock = accept(sock, &addr, &addrlen);
@@ -175,6 +178,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	struct client *c = g_slice_alloc(sizeof(struct client));
 	c->readpending = 0;
 	c->readoff = 0;
+	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	int ret = getnameinfo(&addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
 	if(ret < 0) {
 		logger(LOG_ERR, "getnameinfo() failed: %s", gai_strerror(ret));
