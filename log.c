@@ -10,7 +10,7 @@
 
 char *logfile = NULL;
 int use_syslog = 0;
-int loglevel = 1;
+int loglevel = 2;
 static FILE * log_fd;
 extern bool daemonized;
 
@@ -19,7 +19,11 @@ void logger(int level, char *fmt, ...) {
 	time_t t;
 	struct tm * ti;
 
-	// TODO: Filter loglevel
+	if((loglevel == 0) ||
+	   (loglevel == 1 && (level != LOG_ERR)) ||
+	   (loglevel == 2 && (level != LOG_ERR && level != LOG_NOTICE)) ||
+	   (loglevel == 3 && (level == LOG_DEBUG)))
+		return;
 
 	time(&t);
 	ti = localtime(&t);
