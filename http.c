@@ -65,6 +65,7 @@ static void terminate_client(struct client *c) {
 	event_del(c->writeev);
 	event_free(c->readev);
 	event_free(c->writeev);
+	close(c->fd);
 	if(c->mpeg_handle)
 		mpeg_unregister(c->mpeg_handle);
 	g_slice_free1(sizeof(struct client), c);
@@ -124,7 +125,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		return;
 	}
 	/* Add client to callback list */
-	logger(LOG_DEBUG, "[%s] Requesting %s", c->clientname, url);
+	logger(LOG_DEBUG, "[%s] GET %s", c->clientname, url);
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))
@@ -166,10 +167,10 @@ static void handle_writeev(evutil_socket_t fd, short events, void *p) {
 }
 
 void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
-	//logger(LOG_DEBUG, "New connection on socket");
-	struct sockaddr addr;
-	socklen_t addrlen;
-	int clientsock = accept(sock, &addr, &addrlen);
+	logger(LOG_DEBUG, "New connection on socket");
+	struct sockaddr_storage addr;
+	socklen_t addrlen = sizeof(addr);
+	int clientsock = accept(sock, (struct sockaddr *) &addr, &addrlen);
 	if(clientsock < 0) {
 		logger(LOG_INFO, "accept() returned %d: %s", clientsock, strerror(errno));
 		return;
@@ -179,7 +180,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->readpending = 0;
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
-	int ret = getnameinfo(&addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
+	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
 	if(ret < 0) {
 		logger(LOG_ERR, "getnameinfo() failed: %s", gai_strerror(ret));
 		c->clientname[0] = 0;
