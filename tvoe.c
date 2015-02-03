@@ -17,6 +17,7 @@ const char *conffile = "./tvoe.conf";
 extern int loglevel;
 static bool daemonize = true;
 bool daemonized = false;
+int http_port = 8080;
 
 extern void yylex_destroy();
 extern void init_lexer();
@@ -60,7 +61,6 @@ int main(int argc, char **argv) {
 	/* Initialize libevent */
 	evthread_use_pthreads();
 	event_init();
-	httpd = evhttp_new(NULL);
 
 	/* Parse config file */
 	init_lexer();
@@ -70,6 +70,12 @@ int main(int argc, char **argv) {
 
 	/* Initialize logging subsystem */
 	init_log();
+
+	/* Open HTTP listener */
+	if(http_init(http_port) < 0) {
+		logger(LOG_ERR, "Unable to open HTTP listener, aborting.");
+		return EXIT_FAILURE;
+	}
 
 	if(!quiet)
 		logger(LOG_INFO, "tvoe starting");

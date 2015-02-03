@@ -181,7 +181,10 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	uint8_t last_section;
 	int i;
 
+	//logger(LOG_DEBUG, "Handling new PAT");
+
 	if(!pat_validate(section)) {
+		//logger(LOG_DEBUG, "PAT did not validate!");
 		free(section);
 		return;
 	}
@@ -189,6 +192,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	psi_table_init(new_pat);
 	if(!psi_table_section(new_pat, section) || !psi_table_validate(new_pat)
 			|| !pat_table_validate(new_pat)) {
+		//logger(LOG_DEBUG, "Handling new PAT??");
 		psi_table_free(new_pat);
 		return;
 	}
@@ -297,8 +301,9 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
 			struct client *c = it->data;
-			evbuffer_add(a->out, cur, TS_SIZE);
-			c->cb(c->ptr, a->out);
+			//evbuffer_add(a->out, cur, TS_SIZE);
+			//logger(LOG_DEBUG, "Calling callback!");
+			//c->cb(c->ptr, a->out);
 		}
 
 		if(!a->pids[pid].parse)

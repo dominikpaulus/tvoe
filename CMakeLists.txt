@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 project(tvoe C)
 
 add_definitions("-std=c99 -Wall -D_XOPEN_SOURCE=700 -flto") 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 include(FindBISON)
 include(FindFLEX)
