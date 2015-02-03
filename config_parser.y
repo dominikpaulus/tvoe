@@ -17,7 +17,6 @@ extern int yylex(void);
 extern char *logfile;
 extern int use_syslog;
 extern int loglevel;
-extern int clientbuf;
 extern size_t dmxbuf;
 extern int http_port;
 
@@ -72,9 +71,7 @@ statement: http | frontend | channels | logfile | syslog |
 		 loglevel | clientbuf | dmxbuf;
 
 clientbuf: CLIENTBUF NUMBER {
-	if($2 <= 0)
-		parse_error("Client buffer size must be greater than 0 bytes");
-	clientbuf = $2;
+	printf("NOTICE: clientbuf size is ignored in newer getstream versions");
 }
 
 dmxbuf: DMXBUF NUMBER {
