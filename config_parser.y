@@ -19,6 +19,7 @@ extern int use_syslog;
 extern int loglevel;
 extern int clientbuf;
 extern size_t dmxbuf;
+extern int http_port;
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
@@ -97,11 +98,7 @@ syslog: USESYSLOG YESNO {
 }
 
 http: HTTPLISTEN NUMBER {
-	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(httpd, "::", $2);
-	if(handle == NULL) {
-		fprintf(stderr, "Unable to bind to port %d. Exiting\n", $2);
-		exit(EXIT_FAILURE);
-	}
+	http_port = $2;
 }
 
 channels: CHANNELSCONF STRING {
