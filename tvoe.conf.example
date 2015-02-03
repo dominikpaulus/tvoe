@@ -2,6 +2,9 @@
 # At the moment, only one port per tvoe instance is supported.
 http-listen 8080;
 
+# Loglevel. Range is between 0 and 4, inclusive (none, err, notice, info, debug)
+loglevel 2;
+
 # List of channels to serve, in "zap" file format.
 # (NAME:FREQUENCY:POLARIZATION:UNUSED:SYMBOLRATE:UNUSED:UNUSED:SID:DELIVERY_SYSTEM)
 channels "/etc/tvoe/channels.conf";

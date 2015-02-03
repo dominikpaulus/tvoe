@@ -82,8 +82,8 @@ dmxbuf: DMXBUF NUMBER {
 
 loglevel: LOGLEVEL NUMBER {
 	loglevel = $2;
-	if(loglevel < 0 || loglevel > 5)
-		parse_error("Loglevel must be between 0 and 5.");
+	if(loglevel < 0 || loglevel > 4)
+		parse_error("Loglevel must be between 0 and 4.");
 }
 
 logfile: LOGFILE STRING {

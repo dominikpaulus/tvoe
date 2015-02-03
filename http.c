@@ -131,6 +131,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		if(strcmp(u->text, url))
 			continue;
 		logger(LOG_DEBUG, "Found requested URL");
+		client_senddata(c, (void *) "HTTP/1.1 200 OK\r\n\r\n", strlen("HTTP/1.1 200 OK\r\n\r\n"));
 		/* Register this client with the MPEG module */
 		if(!(c->mpeg_handle = mpeg_register(u->t, client_senddata, (void (*) (void *)) terminate_client, c))) {
 			logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
@@ -180,6 +181,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->readpending = 0;
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
+	c->fd = clientsock;
 	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
 	if(ret < 0) {
 		logger(LOG_ERR, "getnameinfo() failed: %s", gai_strerror(ret));
