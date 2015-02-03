@@ -151,7 +151,7 @@ static void tune_to_fe(struct frontend *fe) {
 		return;
 	}
 	*/
-	logger(LOG_INFO, "Tuning on adapter %d/%d succeeded",
+	logger(LOG_INFO, "Frontend %d/%d successfully tuned",
 			fe->adapter, fe->frontend);
 	{
 		struct dmx_pes_filter_params par;
@@ -257,7 +257,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 
 void frontend_release(void *ptr) {
 	struct frontend *fe = ptr;
-	logger(LOG_INFO, "Releasing frontend %d/%d", fe->adapter, fe->frontend);
+	logger(LOG_INFO, "Frontend %d/%d released", fe->adapter, fe->frontend);
 	event_del(fe->event);
 	event_free(fe->event);
 	used_fe = g_list_remove(used_fe, fe);
