@@ -397,6 +397,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
 		logger(LOG_NOTICE, "Unable to allocate new frontend.");
 		return NULL;
 	}
+	logger(LOG_DEBUG, "Acquired new frontend in mpeg_register()");
 	t->in = s;
 	t->out = evbuffer_new();
 	t->users = 1;
