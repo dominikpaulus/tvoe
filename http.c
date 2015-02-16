@@ -44,6 +44,7 @@ struct client {
 
 	char clientname[INET6_ADDRSTRLEN];
 	void *mpeg_handle;
+	bool timeout;
 
 	/* Client output buffer and read/insert position */
 	char writebuf[CLIENTBUF];
@@ -60,7 +61,7 @@ void http_add_channel(const char *name, int sid, struct tune t) {
 }
 
 static void terminate_client(struct client *c) {
-	logger(LOG_INFO, "[%s] Terminating connection", c->clientname);
+	logger(LOG_NOTICE, "[%s] Terminating connection", c->clientname);
 	event_del(c->readev);
 	event_del(c->writeev);
 	event_free(c->readev);
@@ -71,11 +72,20 @@ static void terminate_client(struct client *c) {
 	g_slice_free1(sizeof(struct client), c);
 }
 
+void client_timeout(evutil_socket_t sock, short event, void *p) {
+	struct client *c = (struct client *) p;
+	terminate_client(c);
+}
+
 static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
 	struct client *c = (struct client *) p;
+	if(c->timeout)
+		return;
 	if(c->fill + bufsize > CLIENTBUF) {
 		logger(LOG_INFO, "[%s] Client buffer overrun, terminating connection", c->clientname);
-		terminate_client(c);
+		event_base_once(NULL, -1, EV_TIMEOUT, client_timeout, c, NULL);
+		c->timeout = true;
+		//terminate_client(c);
 		return;
 	}
 	if(CLIENTBUF - c->cb_inptr <= bufsize) {
@@ -125,7 +135,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		return;
 	}
 	/* Add client to callback list */
-	logger(LOG_DEBUG, "[%s] GET %s", c->clientname, url);
+	logger(LOG_NOTICE, "[%s] GET %s", c->clientname, url);
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))
@@ -181,6 +191,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->readpending = 0;
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
+	c->timeout = false;
 	c->fd = clientsock;
 	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
 	if(ret < 0) {
@@ -193,7 +204,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		g_slice_free1(sizeof(struct client), c);
 		close(clientsock);
 	}
-	c->writeev = event_new(NULL, clientsock, EV_WRITE | EV_PERSIST, handle_writeev, c);
+	c->writeev = event_new(NULL, clientsock, EV_WRITE, handle_writeev, c);
 	if(!c->writeev) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
 		event_free(c->readev);

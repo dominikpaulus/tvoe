@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
@@ -70,6 +71,12 @@ struct work {
 };
 static GAsyncQueue *work_queue;
 
+static void fe_open_failed(evutil_socket_t fd, short int flags, void *arg) {
+	mpeg_notify_timeout(((struct frontend *) arg)->mpeg_handle);
+}
+
+/************** Called in the frontend worker threads ***************/
+
 /*
  * Open frontend descriptors
  */
@@ -87,15 +94,17 @@ static bool open_fe(struct frontend *fe) {
 		(fe->dvr_fd = open(path_dvr, O_RDONLY | O_NONBLOCK)) < 0) {
 		logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
 				fe->frontend, strerror(errno));
+		/* Drop clients - schedule open_failed in main thread */
+		assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 		return false;
 	}
 
 	/* Add libevent callback for TS input */
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
-	struct timeval tv = { 10, 0 }; // 10s timeout
+	struct timeval tv = { 3, 0 }; // 3s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_ERR, "Adding frontend to libevent failed.");
-		event_free(fe->event);
+		assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 		return false;
 	}
 	fe->event = ev;
@@ -108,9 +117,6 @@ static bool open_fe(struct frontend *fe) {
  */
 static void tune_to_fe(struct frontend *fe) {
 	struct tune s = fe->in;
-	// TODO: Proper error handling for this function. At the moment, we just return
-	// leaving this frontend idle - eventually, all clients will drop and we will
-	// release this frontend...
 	/* Tune to transponder */
 	{
 		struct dtv_property p[9];
@@ -133,6 +139,7 @@ static void tune_to_fe(struct frontend *fe) {
 			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
+			assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 			return;
 		}
 	}
@@ -154,15 +161,17 @@ static void tune_to_fe(struct frontend *fe) {
 	logger(LOG_INFO, "Frontend %d/%d successfully tuned",
 			fe->adapter, fe->frontend);
 	{
-		struct dmx_pes_filter_params par;
-		par.pid = 0x2000;
-		par.input = DMX_IN_FRONTEND;
-		par.output = DMX_OUT_TS_TAP;
-		par.pes_type = DMX_PES_OTHER;
-		par.flags = DMX_IMMEDIATE_START;
+		struct dmx_pes_filter_params par = {
+			.pid = 0x2000,
+			.input = DMX_IN_FRONTEND,
+			.output = DMX_OUT_TS_TAP,
+			.pes_type = DMX_PES_OTHER,
+			.flags = DMX_IMMEDIATE_START
+		};
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
 			logger(LOG_ERR, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
+			assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 			return;
 		}
 	}
@@ -172,12 +181,22 @@ static void tune_to_fe(struct frontend *fe) {
 }
 
 static void release_fe(struct frontend *fe) {
+	/* 
+	 * We might also release the frontend as a consequence of the
+	 * tuning process having failed. Then, we may not touch the event,
+	 * as it is not installed yet...
+	 */
+	if(fe->event != NULL) {
+		event_del(fe->event);
+		event_free(fe->event);
+	}
 	close(fe->fe_fd);
 	close(fe->dmx_fd);
 	close(fe->dvr_fd);
 	g_mutex_lock(&queue_lock);
 	idle_fe = g_list_append(idle_fe, fe);
 	g_mutex_unlock(&queue_lock);
+	logger(LOG_INFO, "Released frontend %d/%d", fe->adapter, fe->frontend);
 }
 
 /*
@@ -196,6 +215,8 @@ static void *tune_worker(void *ptr) {
 	}
 	return NULL;
 }
+
+/****************************** Main control flow ************************/
 
 void frontend_init(void) {
 	work_queue = g_async_queue_new();
@@ -217,7 +238,7 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	}
 
 	int n = read(fd, buf, sizeof(buf));
-	if(n < 0) {
+	if(n <= 0) {
 		logger(LOG_ERR, "Invalid read on frontend %d/%d: %s",
 				fe->adapter, fe->frontend, strerror(errno));
 		return;
@@ -240,6 +261,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	struct frontend *fe = (struct frontend *) (f->data);
 	fe->in = s;
 	fe->mpeg_handle = ptr;
+	fe->event = NULL;
 
 	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
 			fe->adapter, fe->frontend);
@@ -257,9 +279,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 
 void frontend_release(void *ptr) {
 	struct frontend *fe = ptr;
-	logger(LOG_INFO, "Frontend %d/%d released", fe->adapter, fe->frontend);
-	event_del(fe->event);
-	event_free(fe->event);
+	logger(LOG_DEBUG, "Releasing frontend %d/%d", fe->adapter, fe->frontend);
 	used_fe = g_list_remove(used_fe, fe);
 	struct work *w = g_slice_new(struct work);
 	w->action = FE_WORK_RELEASE;
