@@ -37,6 +37,7 @@ struct frontend {
 	int dvr_fd;			/**< File descriptor for /dev/dvb/adapterX/dvrY (O_RDONLY) */
 	struct event *event;/**< Handle for the event callbacks on the dvr file handle */
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
+	bool active;		/**< Frontend currently in use */
 };
 
 /** Compute program frequency based on transponder frequency
@@ -230,6 +231,10 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 	struct frontend *fe = (struct frontend *) arg;
 	unsigned char buf[1024 * 188];
 
+	/* We still might get spurious events from disabled frontends */
+	if(!fe->active)
+		return;
+
 	if(flags & EV_TIMEOUT) {
 		logger(LOG_ERR, "Timeout reading data from frontend %d/%d", fe->adapter,
 				fe->frontend);
@@ -262,6 +267,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	fe->in = s;
 	fe->mpeg_handle = ptr;
 	fe->event = NULL;
+	fe->active = true;
 
 	logger(LOG_DEBUG, "Acquiring frontend %d/%d",
 			fe->adapter, fe->frontend);
@@ -284,6 +290,7 @@ void frontend_release(void *ptr) {
 	struct work *w = g_slice_new(struct work);
 	w->action = FE_WORK_RELEASE;
 	w->fe = fe;
+	fe->active = false;
 	g_async_queue_push(work_queue, w);
 }
 
@@ -292,5 +299,6 @@ void frontend_add(int adapter, int frontend, struct lnb l) {
 	fe->lnb = l;
 	fe->adapter = adapter;
 	fe->frontend = frontend;
+	fe->active = false;
 	idle_fe = g_list_append(idle_fe, fe);
 }

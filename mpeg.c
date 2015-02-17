@@ -66,8 +66,6 @@ struct transponder {
 	/** Current frequency */
 	struct tune in;
 	struct pid_info pids[MAX_PID];
-	/** Used as temporary data storage for data sent to the client */
-	struct evbuffer *out;
 	/** List of clients subscribed to this transponder */
 	GSList *clients;
 };
@@ -399,7 +397,6 @@ void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
 	}
 	logger(LOG_DEBUG, "Acquired new frontend in mpeg_register()");
 	t->in = s;
-	t->out = evbuffer_new();
 	t->users = 1;
 	t->clients = NULL;
 	t->clients = g_slist_prepend(t->clients, scb);
@@ -425,7 +422,6 @@ void mpeg_unregister(void *ptr) {
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 			g_slist_free(t->pids[i].callback);
 		}
-		evbuffer_free(t->out);
 		g_slice_free1(sizeof(struct client), scb);
 		transponders = g_slist_remove(transponders, t);
 		g_slice_free1(sizeof(struct transponder), t);
