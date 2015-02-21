@@ -193,6 +193,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	c->timeout = false;
 	c->fd = clientsock;
+	c->mpeg_handle = NULL;
 	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
 	if(ret < 0) {
 		logger(LOG_ERR, "getnameinfo() failed: %s", gai_strerror(ret));
@@ -203,6 +204,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
 		g_slice_free1(sizeof(struct client), c);
 		close(clientsock);
+		return;
 	}
 	c->writeev = event_new(NULL, clientsock, EV_WRITE, handle_writeev, c);
 	if(!c->writeev) {
@@ -210,6 +212,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		event_free(c->readev);
 		g_slice_free1(sizeof(struct client), c);
 		close(clientsock);
+		return;
 	}
 	event_add(c->readev, NULL);
 }
