@@ -83,11 +83,12 @@ static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
 		return;
 	if(c->fill + bufsize > CLIENTBUF) {
 		logger(LOG_INFO, "[%s] Client buffer overrun, terminating connection", c->clientname);
+		/* Schedule client disconnect in main control flow. */
 		event_base_once(NULL, -1, EV_TIMEOUT, client_timeout, c, NULL);
 		c->timeout = true;
-		//terminate_client(c);
 		return;
 	}
+	/* Insert data in client send ringbuffer */
 	if(CLIENTBUF - c->cb_inptr <= bufsize) {
 		/* Wraparound */
 		int a = CLIENTBUF - c->cb_inptr;
@@ -134,14 +135,15 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		terminate_client(c);
 		return;
 	}
-	/* Add client to callback list */
+	/* Find matching SID/URL and add client to callback list */
 	logger(LOG_NOTICE, "[%s] GET %s", c->clientname, url);
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))
 			continue;
 		logger(LOG_DEBUG, "Found requested URL");
-		client_senddata(c, (void *) "HTTP/1.1 200 OK\r\n\r\n", strlen("HTTP/1.1 200 OK\r\n\r\n"));
+		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
+		client_senddata(c, (void*) response, strlen(response));
 		/* Register this client with the MPEG module */
 		if(!(c->mpeg_handle = mpeg_register(u->t, client_senddata, (void (*) (void *)) terminate_client, c))) {
 			logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
@@ -159,6 +161,7 @@ static int min(int a, int b) {
 	return a < b ? a : b;
 }
 static void handle_writeev(evutil_socket_t fd, short events, void *p) {
+	/* Send buffered data to client */
 	struct client *c = (struct client *) p;
 	int tosend = min(c->fill, CLIENTBUF - c->cb_outptr);
 	ssize_t res = send(fd, c->writebuf + c->cb_outptr, tosend, 0);
