@@ -61,7 +61,7 @@ void http_add_channel(const char *name, int sid, struct tune t) {
 }
 
 static void terminate_client(struct client *c) {
-	logger(LOG_NOTICE, "[%s] Terminating connection", c->clientname);
+	logger(LOG_INFO, "[%s] Terminating connection", c->clientname);
 	event_del(c->readev);
 	event_del(c->writeev);
 	event_free(c->readev);
@@ -136,7 +136,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		return;
 	}
 	/* Find matching SID/URL and add client to callback list */
-	logger(LOG_NOTICE, "[%s] GET %s", c->clientname, url);
+	logger(LOG_INFO, "[%s] GET %s", c->clientname, url);
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))
@@ -168,7 +168,7 @@ static void handle_writeev(evutil_socket_t fd, short events, void *p) {
 	if(res < 0) {
 		if(errno == EAGAIN)
 			return;
-		logger(LOG_NOTICE, "[%s] Send error, terminating connection (%s)", c->clientname, strerror(errno));
+		logger(LOG_INFO, "[%s] Send error, terminating connection (%s)", c->clientname, strerror(errno));
 		terminate_client(c);
 		return;
 	}
