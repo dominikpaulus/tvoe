@@ -4,8 +4,9 @@ ConditionPathExists=/etc/tvoe/tvoe.conf
 
 [Service]
 User=Debian-tvoe
-Type=simple
-ExecStart=/usr/bin/tvoe -c /etc/tvoe/tvoe.conf -f
+Type=forking
+ExecStart=/usr/bin/tvoe -c /etc/tvoe/tvoe.conf -p /var/run/tvoe/tvoe.pid
+PIDFile=/var/run/tvoe/tvoe.pid
 
 [Install]
 WantedBy=multi-user.target
