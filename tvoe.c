@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 		logger(LOG_INFO, "tvoe starting");
 
 	// Daemonize if necessary
-	if(daemonize && getppid() != 1) {
+	if(daemonize) {
 		if(!quiet)
 			printf("Daemonizing... ");
 		fflush(stdout);
