@@ -1,0 +1,11 @@
+[Unit]
+Description=DVB-S/S2 streaming server
+ConditionPathExists=/etc/tvoe/tvoe.conf
+
+[Service]
+User=Debian-tvoe
+Type=simple
+ExecStart=/usr/bin/tvoe -c /etc/tvoe/tvoe.conf -f
+
+[Install]
+WantedBy=multi-user.target
