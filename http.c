@@ -88,14 +88,14 @@ static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
 		c->timeout = true;
 		return;
 	}
-	/* Insert data in client send ringbuffer */
+	/* Insert data into client ringbuffer */
 	if(CLIENTBUF - c->cb_inptr <= bufsize) {
 		/* Wraparound */
-		int a = CLIENTBUF - c->cb_inptr;
-		memcpy(c->writebuf + c->cb_inptr, buf, a);
-		int b = bufsize - a;
-		memcpy(c->writebuf, buf + a, b);
-		c->cb_inptr = b;
+		int chunk_a = CLIENTBUF - c->cb_inptr;
+		memcpy(c->writebuf + c->cb_inptr, buf, chunk_a);
+		int chunk_b = bufsize - chunk_a;
+		memcpy(c->writebuf, buf + chunk_a, chunk_b);
+		c->cb_inptr = chunk_b;
 	} else {
 		/* Fits directly */
 		memcpy(c->writebuf + c->cb_inptr, buf, bufsize);
