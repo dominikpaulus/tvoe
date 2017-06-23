@@ -427,9 +427,8 @@ void mpeg_unregister(void *ptr) {
 		g_slice_free1(sizeof(struct transponder), t);
 	} else { // Only unregister this client
 		/* 
-		 * Iterate over all callbacks and remove this client from them.
-		 * This is extremely expensive, however, disconnects should be
-		 * rather rare. This code should be optimized in the future.
+		 * Iterate over all callbacks and remove this client from them.  This
+		 * is expensive, however, disconnects should be rather rare.
 		 */
 		for(int i=0; i < MAX_PID; i++)
 			t->pids[i].callback = g_slist_remove(t->pids[i].callback, scb);
