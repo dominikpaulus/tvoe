@@ -23,6 +23,8 @@
  * to all clients.
  */
 
+const int MAX_TRANSPONDER_RETRIES = 64;
+
 /*
  * Struct describing one specific client and the associated callbacks
  */
@@ -68,6 +70,8 @@ struct transponder {
 	struct pid_info pids[MAX_PID];
 	/** List of clients subscribed to this transponder */
 	GSList *clients;
+	/** How often we already tried to get a tuner for this transponder */
+	int retry_count;
 };
 static GSList *transponders;
 
@@ -341,10 +345,13 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
  */
 void mpeg_notify_timeout(void *handle) {
 	struct transponder *t = handle;
+	t->retry_count++;
 	frontend_release(t->frontend_handle);
-	/* If possible, acquire new frontend as a replacement */
-	t->frontend_handle = frontend_acquire(t->in, t);
-	if(!t->frontend_handle) {
+	if(t->retry_count <= MAX_TRANSPONDER_RETRIES) {
+		/* If possible, acquire new frontend as a replacement */
+		t->frontend_handle = frontend_acquire(t->in, t);
+	}
+	if(t->retry_count > MAX_TRANSPONDER_RETRIES || !t->frontend_handle) {
 		/* No replacement found. Disconnect all clients on this
 		 * transponder */
 		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
@@ -354,8 +361,9 @@ void mpeg_notify_timeout(void *handle) {
 			scb->timeout_cb(scb->ptr);
 		}
 		g_slist_free(copy);
+	} else {
+		logger(LOG_NOTICE, "Switched frontend after frontend error, retry count: %d", t->retry_count);
 	}
-	logger(LOG_NOTICE, "Switched frontend after timeout");
 }
 
 void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
@@ -400,6 +408,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
 	t->users = 1;
 	t->clients = NULL;
 	t->clients = g_slist_prepend(t->clients, scb);
+	t->retry_count = 0;
 	scb->t = t;
 	for(int i = 0; i < MAX_PID; i++) {
 		t->pids[i].last_cc = 0;
