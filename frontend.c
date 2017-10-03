@@ -87,35 +87,43 @@ static GAsyncQueue *work_queue;
  * Open frontend descriptors
  */
 static bool open_fe(struct frontend *fe) {
-	char path_fe[512], path_dmx[512], path_dvr[512];
 	/* Open frontend, demuxer and DVR output */
-	snprintf(path_fe, sizeof(path_fe), "/dev/dvb/adapter%d/frontend%d", fe->adapter,
-			fe->frontend);
-	snprintf(path_dmx, sizeof(path_dmx), "/dev/dvb/adapter%d/demux%d", fe->adapter,
-			fe->frontend);
-	snprintf(path_dvr, sizeof(path_dvr), "/dev/dvb/adapter%d/dvr%d", fe->adapter,
-			fe->frontend);
-	if((fe->fe_fd = open(path_fe, O_RDWR | O_NONBLOCK)) < 0 ||
-		(fe->dmx_fd = open(path_dmx, O_RDWR)) < 0 ||
-		(fe->dvr_fd = open(path_dvr, O_RDONLY | O_NONBLOCK)) < 0) {
-		logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
-				fe->frontend, strerror(errno));
-		/* Drop clients - schedule open_failed in main thread */
-		assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
-		return false;
-	}
+	char path_fe[512], path_dmx[512], path_dvr[512];
+	snprintf(path_fe, sizeof(path_fe), "/dev/dvb/adapter%d/frontend%d", fe->adapter, fe->frontend);
+	snprintf(path_dmx, sizeof(path_dmx), "/dev/dvb/adapter%d/demux%d", fe->adapter, fe->frontend);
+	snprintf(path_dvr, sizeof(path_dvr), "/dev/dvb/adapter%d/dvr%d", fe->adapter, fe->frontend);
+	if((fe->fe_fd = open(path_fe, O_RDWR | O_NONBLOCK)) < 0)
+		goto fe_err;
+	if((fe->dmx_fd = open(path_dmx, O_RDWR)) < 0)
+		goto dmx_err;
+	if((fe->dvr_fd = open(path_dvr, O_RDONLY | O_NONBLOCK)) < 0)
+		goto dvr_err;
 
 	/* Add libevent callback for TS input */
 	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
 	struct timeval tv = { 3, 0 }; // 3s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_ERR, "Adding frontend to libevent failed.");
+		close(fe->fe_fd);
+		close(fe->dmx_fd);
+		close(fe->dvr_fd);
 		assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 		return false;
 	}
 	fe->event = ev;
 
 	return true;
+
+dvr_err:
+	close(fe->dmx_fd);
+dmx_err:
+	close(fe->dvr_fd);
+fe_err:
+	logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
+			fe->frontend, strerror(errno));
+	/* Drop clients - schedule open_failed in main thread */
+	assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+	return false;
 }
 
 /*
