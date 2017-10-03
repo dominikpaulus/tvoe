@@ -22,7 +22,7 @@ extern int http_port;
 
 /* Temporary variables needed while parsing */
 static struct lnb l;
-static int adapter = -1, frontend = -1;
+static int adapter = -1, frontend = 0;
 
 void yyerror(const char *str)
 {
