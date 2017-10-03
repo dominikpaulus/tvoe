@@ -1,5 +1,5 @@
-#ifndef __INCLUDED_GETSH_HTTP
-#define __INCLUDED_GETSH_HTTP
+#ifndef __INCLUDED_TVOE_HTTP
+#define __INCLUDED_TVOE_HTTP
 
 #include <stdint.h>
 #include "frontend.h"

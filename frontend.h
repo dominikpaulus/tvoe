@@ -1,5 +1,5 @@
-#ifndef __INCLUDED_GETSH_FRONTEND
-#define __INCLUDED_GETSH_FRONTEND
+#ifndef __INCLUDED_TVOE_FRONTEND
+#define __INCLUDED_TVOE_FRONTEND
 
 #include <stdbool.h>
 

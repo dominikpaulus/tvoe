@@ -1,5 +1,5 @@
-#ifndef __INCLUDED_GETSH_CHANNELS
-#define __INCLUDED_GETSH_CHANNELS
+#ifndef __INCLUDED_TVOE_CHANNELS
+#define __INCLUDED_TVOE_CHANNELS
 
 /**
  * Parse the channels.conf in "channelsconf" and add the appropriate

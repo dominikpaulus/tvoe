@@ -1,5 +1,5 @@
-#ifndef __INCLUDED_GETSH_LOGGER
-#define __INCLUDED_GETSH_LOGGER
+#ifndef __INCLUDED_TVOE_LOGGER
+#define __INCLUDED_TVOE_LOGGER
 #include <syslog.h>
 
 extern int loglevel;

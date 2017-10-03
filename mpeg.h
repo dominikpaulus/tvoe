@@ -1,5 +1,5 @@
-#ifndef __INCLUDED_GETSH_MPEG
-#define __INCLUDED_GETSH_MPEG
+#ifndef __INCLUDED_TVOE_MPEG
+#define __INCLUDED_TVOE_MPEG
 
 #include <stddef.h>
 #include <event.h>
