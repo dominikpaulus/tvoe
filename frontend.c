@@ -17,7 +17,7 @@
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
-#include "frontend.h"
+#include "tvoe.h"
 
 /* Size of demux buffer. Set by config parser, 0 means default */
 size_t dmxbuf = 0;
@@ -100,14 +100,14 @@ static bool open_fe(struct frontend *fe) {
 		goto dvr_err;
 
 	/* Add libevent callback for TS input */
-	struct event *ev = event_new(NULL, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
+	struct event *ev = event_new(evbase, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
 	struct timeval tv = { 3, 0 }; // 3s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_ERR, "Adding frontend to libevent failed.");
 		close(fe->fe_fd);
 		close(fe->dmx_fd);
 		close(fe->dvr_fd);
-		assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+		assert(event_base_once(evbase, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 		return false;
 	}
 	fe->event = ev;
@@ -122,7 +122,7 @@ fe_err:
 	logger(LOG_ERR, "Failed to open frontend (%d/%d): %s", fe->adapter,
 			fe->frontend, strerror(errno));
 	/* Drop clients - schedule open_failed in main thread */
-	assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+	assert(event_base_once(evbase, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 	return false;
 }
 
@@ -153,7 +153,7 @@ static bool tune_to_fe(struct frontend *fe) {
 			logger(LOG_ERR, "Failed to tune frontend %d/%d to freq %d, sym	%d",
 					fe->adapter, fe->frontend, get_frequency(p[5].u.data,
 					fe->lnb), s.dvbs.symbol_rate);
-			assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+			assert(event_base_once(evbase, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 			return false;
 		}
 	}
@@ -185,7 +185,7 @@ static bool tune_to_fe(struct frontend *fe) {
 		if(ioctl(fe->dmx_fd, DMX_SET_PES_FILTER, &par) < 0) {
 			logger(LOG_ERR, "Failed to configure tmuxer on frontend %d/%d",
 					fe->adapter, fe->frontend);
-			assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+			assert(event_base_once(evbase, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 			return false;
 		}
 	}

@@ -11,6 +11,7 @@
 #include "log.h"
 #include "mpeg.h"
 #include "http.h"
+#include "tvoe.h"
 
 /* Client buffer size: Set by config parser */
 #define TS_SIZE 188
@@ -84,7 +85,7 @@ static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
 	if(c->fill + bufsize > CLIENTBUF) {
 		logger(LOG_INFO, "[%s] Client buffer overrun, terminating connection", c->clientname);
 		/* Schedule client disconnect in main control flow. */
-		event_base_once(NULL, -1, EV_TIMEOUT, client_timeout, c, NULL);
+		event_base_once(evbase, -1, EV_TIMEOUT, client_timeout, c, NULL);
 		c->timeout = true;
 		return;
 	}
@@ -202,14 +203,14 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		logger(LOG_ERR, "getnameinfo() failed: %s", gai_strerror(ret));
 		c->clientname[0] = 0;
 	}
-	c->readev = event_new(NULL, clientsock, EV_READ | EV_PERSIST, handle_readev, c);
+	c->readev = event_new(evbase, clientsock, EV_READ | EV_PERSIST, handle_readev, c);
 	if(!c->readev) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
 		g_slice_free1(sizeof(struct client), c);
 		close(clientsock);
 		return;
 	}
-	c->writeev = event_new(NULL, clientsock, EV_WRITE, handle_writeev, c);
+	c->writeev = event_new(evbase, clientsock, EV_WRITE, handle_writeev, c);
 	if(!c->writeev) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
 		event_free(c->readev);
@@ -245,7 +246,7 @@ int http_init(uint16_t port) {
 		logger(LOG_ERR, "Unable to listen on already bound sock: %s", strerror(errno));
 		return -3;
 	}
-	if(event_assign(&httpd, NULL, listenSock, EV_PERSIST | EV_READ | EV_WRITE, http_connect_cb, NULL) < 0) {
+	if(event_assign(&httpd, evbase, listenSock, EV_PERSIST | EV_READ | EV_WRITE, http_connect_cb, NULL) < 0) {
 		logger(LOG_ERR, "Invalid arguments in event_assign() (this should never happen, this is a bug)");
 		return -4;
 	}

@@ -12,6 +12,7 @@
 #include <signal.h>
 #include "http.h"
 #include "log.h"
+#include "tvoe.h"
 
 const char *conffile = "./tvoe.conf";
 extern int loglevel;
@@ -61,6 +62,12 @@ int main(int argc, char **argv) {
 	/* Initialize libevent */
 	evthread_use_pthreads();
 	event_init();
+
+	evbase = event_base_new();
+	if(!evbase) {
+		logger(LOG_ERR, "Unable to create event base!");
+		exit(EXIT_FAILURE);
+	}
 
 	/* Parse config file */
 	init_lexer();
@@ -144,7 +151,7 @@ int main(int argc, char **argv) {
 		sigaction(SIGPIPE, &action, NULL);
 	}
 
-	event_dispatch();
+	event_base_dispatch(evbase);
 
 	logger(LOG_ERR, "Event loop exited");
 
