@@ -15,6 +15,7 @@ find_path(BITSTREAM_INCLUDE_DIR bitstream/common.h)
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 pkg_check_modules(EVENT REQUIRED libevent)
 pkg_check_modules(EVENT-THREAD REQUIRED libevent_pthreads)
+pkg_check_modules(DVBV5 REQUIRED libdvbv5)
 
 BISON_TARGET(ConfigParser config_parser.y
 	${CMAKE_CURRENT_BINARY_DIR}/config_parser.c)
@@ -25,6 +26,7 @@ ADD_FLEX_BISON_DEPENDENCY(ConfigLexer ConfigParser)
 INCLUDE_DIRECTORIES($(CMAKE_CURRENT_SOURCE_DIR)
 ${CMAKE_CURRENT_BINARY_DIR}
 ${GLIB_INCLUDE_DIRS}
+${DVBV5_INCLUDE_DIRS}
 ${BITSTREAM_INCLUDE_DIR})
 
 ADD_EXECUTABLE(tvoe
@@ -32,4 +34,5 @@ ADD_EXECUTABLE(tvoe
 	tvoe.c http.c frontend.c log.c mpeg.c channels.c)
 TARGET_LINK_LIBRARIES(tvoe
 	${EVENT_LIBRARIES} ${EVENT-THREAD_LIBRARIES}
-	${GLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+	${GLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
+	${DVBV5_LIBRARIES})
