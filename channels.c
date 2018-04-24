@@ -3,68 +3,74 @@
 #include <string.h>
 #include <glib.h>
 #include <stdlib.h>
+#include <libdvbv5/dvb-file.h>
 #include "channels.h"
 #include "log.h"
 #include "http.h"
 #include "mpeg.h"
 
-#define MAXTOKS 2048
-
-struct tokens {
-	char *t[MAXTOKS];
-	int count;
-};
-
-static struct tokens tokenize(char *str) {
-	int i = 0;
-	struct tokens ret;
-	ret.count = 0;
-	ret.t[0] = strtok(str, ":");
-	if(ret.t[0] == NULL)
-		return ret;
-	for(i=1; i < MAXTOKS && (ret.t[i] = strtok(NULL, ":")); i++)
-		;
-	ret.count = i;
-	return ret;
-}
-
 int parse_channels(const char *file) {
-	int i;
-	FILE * fd = fopen(file, "r");
-	if(!fd) {
-		logger(LOG_ERR, "channels.conf open failed: %s",
-				strerror(errno));
+	/*
+	 * dvb_read_file() does not provide error reporting beyond
+	 * returning NULL, so let's do some basic sanity checks
+	 * before trying to open the file
+	 */
+	FILE *f = fopen(file, "r");
+	if(!f) {
+		logger(LOG_ERR, "Unable to open channels/zap file \"%s\": %s",
+			strerror(errno));
 		return -1;
 	}
-	char buf[2048];
-	for(i=1; fgets(buf, sizeof(buf), fd); i++) {
-		if(feof(fd) || ferror(fd))
-			break;
-		struct tokens tok = tokenize(buf);
-		if(tok.count != 9) {
-			logger(LOG_ERR, "Parsing channel config failed: Line %d: "
-					"Invalid number of tokens (was: %d, expected: %d)",
-					i, tok.count, 9);
-			continue;
+	fclose(f);
+	struct dvb_file *dfile = dvb_read_file(file);
+	if(!file) {
+		/* XXX - but we can't do better at the moment. */
+		logger(LOG_ERR, "Failed to parse channels file \"%s\". For more "
+			"information, run tvoe in foreground and check stderr output.");
+		return -1;
+	}
+	logger(LOG_INFO, "Parsed channels config (\"%s\"), importing stations", file);
+	struct dvb_entry *cur = dfile->first_entry;
+	int cnt;
+	/*
+	 * Iterate over channels in zap file
+	 */
+	for(cnt = 0; cur != NULL; ++cnt) {
+		struct tune s = {
+			.type = 0, // Unused
+			.sid = cur->service_id
+		};
+		if(cur->sat_number > 0 || cur->freq_bpf != 0) {
+			logger(LOG_ERR, "Channel \"%s\" has unsupported settings (probably DiSeqC or Unicable)",
+				cur->channel);
+			fprintf(stderr, "%d %d\n", cur->sat_number, cur->freq_bpf);
+			goto next;
 		}
-		/*if(atoi(tok.t[7]) >= MAX_PID) {
-			logger(LOG_ERR, "Parsing channels config failed: Line %d: "
-					"Invalid SID: %s", i, tok.t[7]);
-			continue;
-		}*/
-		bool pol = tok.t[2][0] == 'h';
-		struct tune l = { 0, { // unused
-			atoi(tok.t[8]), // delivery system
-			atoi(tok.t[1]) * 1000, // frequency
-			atoi(tok.t[4]) * 1000, // symbol rate
-			pol }, atoi(tok.t[7]) }; // polarization and SID
-		http_add_channel(tok.t[0], atoi(tok.t[7]), l);
+		for(int i = 0; i < cur->n_props; ++i) {
+			if(cur->props[i].cmd == DTV_DELIVERY_SYSTEM) {
+				int sys = cur->props[i].u.data;
+				if(sys != SYS_DVBS && sys != SYS_DVBS2) {
+					logger(LOG_ERR, "Channel \"%s\" is using unsupported delivery subsystem (%d). Currently, tvoe only supports DVB-S/S2.",
+						cur->channel, sys);
+					goto next;
+				}
+				s.dvbs.delivery_system = sys;
+			} else if(cur->props[i].cmd == DTV_POLARIZATION) {
+				s.dvbs.polarization = cur->props[i].u.data;
+			} else if(cur->props[i].cmd == DTV_FREQUENCY) {
+				s.dvbs.frequency = cur->props[i].u.data;
+			} else if(cur->props[i].cmd == DTV_SYMBOL_RATE) {
+				s.dvbs.symbol_rate = cur->props[i].u.data;
+			} else if(cur->props[i].cmd == DTV_DISEQC_MASTER) {
+				logger(LOG_ERR, "Channel \"%s\": Ignoring DiSeqC commands (not supported)",
+					cur->channel);
+			}
+		}
+		http_add_channel(cur->channel, cur->service_id, s);
+next:
+		cur = cur->next;
 	}
-	if(ferror(fd)) {
-		logger(LOG_ERR, "channels.conf read failed: %s",
-				strerror(errno));
-		return -1;
-	}
-
+	logger(LOG_INFO, "Successfully imported channels from \"%s\". "
+		"Added a total of %d channels.", file, cnt);
 	return 0;
 }
