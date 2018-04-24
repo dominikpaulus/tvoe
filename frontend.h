@@ -49,7 +49,7 @@ void frontend_release(void *ptr);
  * @param adapter Adapter number
  * @param frontend Frontend number
  */
-void frontend_add(int adapter, int frontend, struct lnb l);
+int frontend_add(int adapter, int frontend, struct lnb l);
 /**
  * Initialize the frontend management subsystem
  */

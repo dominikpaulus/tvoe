@@ -345,7 +345,46 @@ static void fe_open_failed(evutil_socket_t fd, short int flags, void *arg) {
 	}
 }
 
-void frontend_add(int adapter, int frontend, struct lnb l) {
+int frontend_add(int adapter, int frontend, struct lnb l) {
+	/*
+	 * Query frontend for capabililties and make sure
+	 * that it provides a supported delivery subsystem
+	 * (DVB-S/S2, currently)
+	 */
+	char path_fe[512];
+	snprintf(path_fe, sizeof(path_fe), "/dev/dvb/adapter%d/frontend%d", adapter, frontend);
+	int fd = open(path_fe, O_RDONLY);
+	if(fd < 0) {
+		logger(LOG_ERR, "Unable to open frontend adapter%d/frontend%d: %s",
+			adapter, frontend, strerror(errno));
+		return -1;
+	}
+	struct dtv_property prop;
+	struct dtv_properties props = {
+		.num = 1,
+		.props = &prop
+	};
+	prop.cmd = DTV_ENUM_DELSYS;
+	if(ioctl(fd, FE_GET_PROPERTY, &props) < 0) {
+		logger(LOG_ERR, "Unable to query frontend adapter%d/frontend%d for capabilities: %s",
+			adapter, frontend, strerror(errno));
+		return -1;
+	}
+	close(fd);
+	/* prop.u.buffer now contains a list of supported delivery subsystems */
+	bool known = false;
+	for(int i = 0; i < prop.u.buffer.len; ++i) {
+		if(prop.u.buffer.data[i] == SYS_DVBS || prop.u.buffer.data[i] == SYS_DVBS2)
+			known = true;
+		logger(LOG_DEBUG, "Frontend adapter%d/frontend%d supports delivery subsystem %d",
+			adapter, frontend, prop.u.buffer.data[i]);
+	}
+	if(!known) {
+		logger(LOG_ERR, "Frontend adapter%d/frontend%d supports %d delivery subsystem, but none of them are supported by tvoe :-/.",
+			adapter, frontend);
+		return -1;
+	}
+
 	struct frontend *fe = g_slice_alloc0(sizeof(struct frontend));
 	fe->lnb = l;
 	fe->adapter = adapter;
@@ -353,4 +392,5 @@ void frontend_add(int adapter, int frontend, struct lnb l) {
 	fe->state = state_idle;
 	g_mutex_init(&fe->lock);
 	idle_fe = g_list_append(idle_fe, fe);
+	return 0;
 }

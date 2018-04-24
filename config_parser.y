@@ -115,7 +115,8 @@ frontend: FRONTEND '{' frontendoptions '}' {
 		l.lof2 = 10600000;
 	if(!l.slof)
 		l.slof = 11700000;
-	frontend_add(adapter, frontend, l);
+	if(frontend_add(adapter, frontend, l) != 0)
+		parse_error("Unable to add frontend");
 	adapter = -1;
 	frontend = 0;
 }
