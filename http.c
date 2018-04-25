@@ -46,6 +46,7 @@ struct client {
 	char clientname[INET6_ADDRSTRLEN];
 	void *mpeg_handle;
 	bool timeout;
+	bool shutdown;
 
 	/* Client output buffer and read/insert position */
 	char writebuf[CLIENTBUF];
@@ -143,15 +144,16 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		if(strcmp(u->text, url))
 			continue;
 		logger(LOG_DEBUG, "Found requested URL");
-		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
-		client_senddata(c, (void*) response, strlen(response));
 		/* Register this client with the MPEG module */
 		if(!(c->mpeg_handle = mpeg_register(u->t, client_senddata, (void (*) (void *)) terminate_client, c))) {
 			logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
-			/* TODO: Send meaningful reply */
-			terminate_client(c);
-			//evhttp_send_reply(req, HTTP_SERVUNAVAIL, "No available tuner", NULL);
+			const char *response = "HTTP/1.1 503 No tuner available to fulfil your request\r\n\r\n";
+			client_senddata(c, (void*) response, strlen(response));
+			c->shutdown = true;
+			return;
 		}
+		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
+		client_senddata(c, (void*) response, strlen(response));
 		return;
 	}
 	logger(LOG_INFO, "Client %s requested invalid URL %s, terminating connection", c->clientname, url);
@@ -179,6 +181,8 @@ static void handle_writeev(evutil_socket_t fd, short events, void *p) {
 		c->cb_outptr = 0;
 	if(c->fill)
 		event_add(c->writeev, NULL);
+	else if(c->shutdown) /* Socket is in shutdown state and all data has already been sent */
+		terminate_client(c);
 }
 
 void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
@@ -196,6 +200,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	c->timeout = false;
+	c->shutdown = false;
 	c->fd = clientsock;
 	c->mpeg_handle = NULL;
 	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
