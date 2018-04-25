@@ -38,6 +38,10 @@ enum fe_state {
 struct frontend {
 	struct tune in;		/**< Associated transponder, if applicable */
 	struct lnb lnb;		/**< Attached LNB */
+	struct {
+		int len;
+		uint8_t caps[32];
+	} caps;
 	int adapter;		/**< Adapter number */
 	int frontend;		/**< Frontend number */
 	int fe_fd;			/**< File descriptor for /dev/dvb/adapterX/frontendY (O_RDONLY) */
@@ -278,16 +282,25 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	logger(LOG_INFO, "acquire()");
 	// Get new idle frontend from queue
 	g_mutex_lock(&queue_lock);
-	GList *f = g_list_first(idle_fe);
-	if(!f) {
+	GList *it = g_list_first(idle_fe);
+	bool found = false;
+	while(it != NULL && found == false) {
+		struct frontend *fe = (struct frontend *) (it->data);
+		for(int i = 0; i < fe->caps.len; ++i)
+			if(fe->caps.caps[i] == s.delivery_system)
+				found = true;
+		if(!found)
+			it = it->next;
+	}
+	if(!found) {
 		g_mutex_unlock(&queue_lock);
 		logger(LOG_INFO, "No more free frontends in queue.");
 		return NULL;
 	}
-	idle_fe = g_list_remove_link(idle_fe, f);
+	idle_fe = g_list_remove_link(idle_fe, it);
 	g_mutex_unlock(&queue_lock);
 
-	struct frontend *fe = (struct frontend *) (f->data);
+	struct frontend *fe = (struct frontend *) (it->data);
 	fe->in = s;
 	fe->mpeg_handle = ptr;
 	fe->event = NULL;
@@ -386,6 +399,10 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	}
 
 	struct frontend *fe = g_slice_alloc0(sizeof(struct frontend));
+	/* Copy list of frontend capabilities */
+	fe->caps.len = prop.u.buffer.len;
+	for(int i = 0; i < prop.u.buffer.len; ++i)
+		fe->caps.caps[i] = prop.u.buffer.data[i];
 	fe->lnb = l;
 	fe->adapter = adapter;
 	fe->frontend = frontend;
