@@ -381,6 +381,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	if(ioctl(fd, FE_GET_PROPERTY, &props) < 0) {
 		logger(LOG_ERR, "Unable to query frontend adapter%d/frontend%d for capabilities: %s",
 			adapter, frontend, strerror(errno));
+		close(fd);
 		return -1;
 	}
 	close(fd);
