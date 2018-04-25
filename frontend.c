@@ -137,10 +137,10 @@ static bool tune_to_fe(struct frontend *fe) {
 		struct dtv_properties cmds;
 		bool tone = s.dvbs.frequency > 2200000 && s.dvbs.frequency >= fe->lnb.slof;
 		p[0].cmd = DTV_CLEAR;
-		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = s.dvbs.delivery_system;
+		p[1].cmd = DTV_DELIVERY_SYSTEM;		p[1].u.data = s.delivery_system;
 		p[2].cmd = DTV_SYMBOL_RATE;			p[2].u.data = s.dvbs.symbol_rate;
-		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = FEC_AUTO;
-		p[4].cmd = DTV_INVERSION;			p[4].u.data = INVERSION_AUTO;
+		p[3].cmd = DTV_INNER_FEC;			p[3].u.data = s.dvbs.fec;
+		p[4].cmd = DTV_INVERSION;			p[4].u.data = s.dvbs.inversion;
 		p[5].cmd = DTV_FREQUENCY;			p[5].u.data = get_frequency(s.dvbs.frequency, fe->lnb);
 		p[6].cmd = DTV_VOLTAGE;				p[6].u.data = s.dvbs.polarization ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13;
 		p[7].cmd = DTV_TONE;				p[7].u.data = tone ? SEC_TONE_ON : SEC_TONE_OFF;

@@ -5,13 +5,13 @@
 
 struct tune {
 	/** Delivery system type, reserved for future use */
-	unsigned int type;
+	unsigned int delivery_system;
 //	union {
 	struct {
-		/** Delivery system (SYS_DVBS vs SYS_DVBS2) */
-		unsigned int delivery_system;
 		unsigned int frequency;
 		unsigned int symbol_rate;
+		unsigned int inversion;
+		unsigned int fec;
 		/** Polarization. True: horizontal, false: Vertical */
 		bool polarization;
 	} dvbs;

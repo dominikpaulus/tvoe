@@ -381,7 +381,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
 	for(; it != NULL; it = g_slist_next(it)) {
 		struct transponder *t = it->data;
 		struct tune in = t->in;
-		if(in.dvbs.delivery_system == s.dvbs.delivery_system &&
+		if(in.delivery_system == s.delivery_system &&
 				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
 				in.dvbs.frequency == s.dvbs.frequency &&
 				in.dvbs.polarization == s.dvbs.polarization) {

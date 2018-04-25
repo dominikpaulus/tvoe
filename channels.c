@@ -37,7 +37,6 @@ int parse_channels(const char *file) {
 	 */
 	for(cnt = 0; cur != NULL; ++cnt) {
 		struct tune s = {
-			.type = 0, // Unused
 			.sid = cur->service_id
 		};
 		if(cur->sat_number > 0 || cur->freq_bpf != 0) {
@@ -47,20 +46,31 @@ int parse_channels(const char *file) {
 			goto next;
 		}
 		for(int i = 0; i < cur->n_props; ++i) {
-			if(cur->props[i].cmd == DTV_DELIVERY_SYSTEM) {
-				int sys = cur->props[i].u.data;
-				if(sys != SYS_DVBS && sys != SYS_DVBS2) {
-					logger(LOG_ERR, "Channel \"%s\" is using unsupported delivery subsystem (%d). Currently, tvoe only supports DVB-S/S2.",
-						cur->channel, sys);
-					goto next;
-				}
-				s.dvbs.delivery_system = sys;
-			} else if(cur->props[i].cmd == DTV_POLARIZATION) {
+			if(cur->props[i].cmd != DTV_DELIVERY_SYSTEM)
+				continue;
+
+			int sys = cur->props[i].u.data;
+			if(sys == SYS_DVBS || sys == SYS_DVBS2) {
+				s.delivery_system = sys;
+				s.dvbs.inversion = INVERSION_AUTO;
+				s.dvbs.fec = FEC_AUTO;
+			} else {
+				logger(LOG_ERR, "Channel \"%s\" is using unsupported delivery subsystem (%d). Currently, tvoe only supports DVB-S/S2.",
+					cur->channel, sys);
+				goto next;
+			}
+		}
+		for(int i = 0; i < cur->n_props; ++i) {
+			if(cur->props[i].cmd == DTV_POLARIZATION) {
 				s.dvbs.polarization = cur->props[i].u.data;
 			} else if(cur->props[i].cmd == DTV_FREQUENCY) {
 				s.dvbs.frequency = cur->props[i].u.data;
 			} else if(cur->props[i].cmd == DTV_SYMBOL_RATE) {
 				s.dvbs.symbol_rate = cur->props[i].u.data;
+			} else if(cur->props[i].cmd == DTV_INVERSION) {
+				s.dvbs.inversion = cur->props[i].u.data;
+			} else if(cur->props[i].cmd == DTV_INNER_FEC) {
+				s.dvbs.fec = cur->props[i].u.data;
 			} else if(cur->props[i].cmd == DTV_DISEQC_MASTER) {
 				logger(LOG_ERR, "Channel \"%s\": Ignoring DiSeqC commands (not supported)",
 					cur->channel);
