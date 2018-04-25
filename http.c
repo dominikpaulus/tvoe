@@ -118,15 +118,28 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		c->buf[c->readoff] = 0;
 	}
 	/* Read error, terminated connection or no proper client request */
-	if(ret <= 0 || c->readoff == sizeof(c->buf) - 1) {
-		if(ret < 0)
-			logger(LOG_INFO, "[%s] Read error: %s", c->clientname, strerror(errno));
+	if(ret <= 0) {
+		logger(LOG_INFO, "[%s] Read error: %s", c->clientname, strerror(errno));
 		terminate_client(c);
 		return;
 	}
-	/* Read request, if already finished */
-	if(!strchr(c->buf, '\n'))
+	if(c->readoff == sizeof(c->buf) - 1) {
+		logger(LOG_INFO, "[%s] Client request has exceeded input buffer size", c->clientname);
+		const char *response = "HTTP/1.1 400 Maximum request size exceeded\r\n\r\n";
+		client_senddata(c, (void*) response, strlen(response));
+		c->shutdown = true;
 		return;
+	}
+	/* Read request, if already finished */
+	if(!strchr(c->buf, '\n')) {
+		/* Partial read - wait for remaining line */
+		return;
+	}
+	/*
+	 * We only read at most one line from the client. Ignore
+	 * any additional data sent, and remove the read event.
+	 */
+	event_del(c->readev);
 	char *get = strtok(c->buf, " "),
 		 *url = strtok(NULL, " "),
 		 *http = strtok(NULL, " ");
