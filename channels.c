@@ -23,10 +23,10 @@ int parse_channels(const char *file) {
 	}
 	fclose(f);
 	struct dvb_file *dfile = dvb_read_file(file);
-	if(!file) {
+	if(!dfile) {
 		/* XXX - but we can't do better at the moment. */
 		logger(LOG_ERR, "Failed to parse channels file \"%s\". For more "
-			"information, run tvoe in foreground and check stderr output.");
+			"information, run tvoe in foreground and check stderr output.", file);
 		return -1;
 	}
 	logger(LOG_INFO, "Parsed channels config (\"%s\"), importing stations", file);
