@@ -372,6 +372,19 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 			adapter, frontend, strerror(errno));
 		return -1;
 	}
+	/* Query basic frontend information */
+	struct dvb_frontend_info info;
+	if(ioctl(fd, FE_GET_INFO, &info)) {
+		logger(LOG_ERR, "Unable to query frontend adapter%d/frontend%d information: %s",
+			adapter, frontend, strerror(errno));
+		close(fd);
+		return -1;
+	}
+	logger(LOG_DEBUG, "Attaching frontend adapter%d/frontend%d (%s)",
+			adapter, frontend, info.name);
+	/*
+	 * Query delivery subsystems supported
+	 */
 	struct dtv_property prop;
 	struct dtv_properties props = {
 		.num = 1,
@@ -410,5 +423,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	fe->state = state_idle;
 	g_mutex_init(&fe->lock);
 	idle_fe = g_list_append(idle_fe, fe);
+	logger(LOG_INFO, "Frontend adapter%d/frontend%d (%s) attached",
+			adapter, frontend, info.name);
 	return 0;
 }
