@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 char *logfile = NULL;
 int use_syslog = 0;
@@ -15,7 +16,7 @@ static FILE * log_fd;
 extern bool daemonized;
 
 void logger(int level, char *fmt, ...) {
-	char text[2048], tv[256];
+	char text[2048], timestamp[256];
 	time_t t;
 	struct tm * ti;
 
@@ -27,7 +28,7 @@ void logger(int level, char *fmt, ...) {
 
 	time(&t);
 	ti = localtime(&t);
-	strftime(tv, sizeof(tv), "[%X %x]", ti);
+	strftime(timestamp, sizeof(timestamp), "[%X %x]", ti);
 
 	va_list args;
 	va_start(args, fmt);
@@ -35,13 +36,28 @@ void logger(int level, char *fmt, ...) {
 	va_end(args);
 
 	if(log_fd) {
-		fprintf(log_fd, "%s %s\n", tv, text);
+		fprintf(log_fd, "%s %s\n", timestamp, text);
 		fflush(log_fd);
 	}
 	if(use_syslog)
 		syslog(level, "%s", text);
-	if(!daemonized)
-		fprintf(stderr, "%s %s\n", tv, text);
+	if(!daemonized) {
+		FILE *out;
+		if(level == LOG_ERR || level == LOG_NOTICE)
+			out = stderr;
+		else
+			out = stdout;
+
+		/*
+		 * Do not log timestamps if output is not interactive
+		 * (e.g. if we are running under systemd-supervision and
+		 * output is sent to syslog anyway)
+		 */
+		if(isatty(STDOUT_FILENO))
+			fprintf(out, "%s %s\n", timestamp, text);
+		else
+			fprintf(out, "%s\n", text);
+	}
 }
 
 int init_log(void) {
