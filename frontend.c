@@ -279,7 +279,6 @@ static void dvr_callback(evutil_socket_t fd, short int flags, void *arg) {
 
 /* Tune to a new, previously unknown transponder */
 void *frontend_acquire(struct tune s, void *ptr) {
-	logger(LOG_INFO, "acquire()");
 	// Get new idle frontend from queue
 	g_mutex_lock(&queue_lock);
 	GList *it = g_list_first(idle_fe);
