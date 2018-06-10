@@ -4,9 +4,16 @@ ConditionPathExists=/etc/tvoe/tvoe.conf
 
 [Service]
 User=Debian-tvoe
-Type=forking
-ExecStart=/usr/bin/tvoe -c /etc/tvoe/tvoe.conf -p /var/run/tvoe/tvoe.pid
-PIDFile=/var/run/tvoe/tvoe.pid
+ExecStart=/usr/bin/tvoe -f -c /etc/tvoe/tvoe.conf
+Restart=on-failure
+MemoryDenyWriteExecute=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=
 
 [Install]
 WantedBy=multi-user.target
