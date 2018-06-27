@@ -62,7 +62,7 @@ int parse_channels(const char *file) {
 		}
 		for(int i = 0; i < cur->n_props; ++i) {
 			if(cur->props[i].cmd == DTV_POLARIZATION) {
-				s.dvbs.polarization = cur->props[i].u.data;
+				s.dvbs.polarization = cur->props[i].u.data == 1;
 			} else if(cur->props[i].cmd == DTV_FREQUENCY) {
 				s.dvbs.frequency = cur->props[i].u.data;
 			} else if(cur->props[i].cmd == DTV_SYMBOL_RATE) {
