@@ -40,13 +40,14 @@ struct client {
 	struct event *readev, *writeev;
 
 	/* For input line reading */
-	int readpending, readoff;
+	int readoff;
 	char buf[512];
 
 	char clientname[INET6_ADDRSTRLEN];
 	void *mpeg_handle;
 	bool timeout;
 	bool shutdown;
+	bool reading;
 
 	/* Client output buffer and read/insert position */
 	char writebuf[CLIENTBUF];
@@ -111,17 +112,21 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	//logger(LOG_DEBUG, "readev() called");
 	struct client *c = (struct client *) p;
 	int ret = recv(fd, c->buf + c->readoff, sizeof(c->buf) - c->readoff - 1, 0);
-	if(ret < 0)
-		logger(LOG_INFO, "Read error (disconnecting client): %s", strerror(errno));
-	if(ret > 0) {
-		c->readoff += ret;
-		c->buf[c->readoff] = 0;
-	}
 	/* Read error, terminated connection or no proper client request */
 	if(ret <= 0) {
 		logger(LOG_INFO, "[%s] Read error: %s", c->clientname, strerror(errno));
 		terminate_client(c);
 		return;
+	}
+	/*
+	 * We only read at most one line from the client. Ignore
+	 * any additional data sent.
+	 */
+	if(!c->reading)
+		return;
+	if(ret > 0) {
+		c->readoff += ret;
+		c->buf[c->readoff] = 0;
 	}
 	if(c->readoff == sizeof(c->buf) - 1) {
 		logger(LOG_INFO, "[%s] Client request has exceeded input buffer size", c->clientname);
@@ -136,10 +141,11 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		return;
 	}
 	/*
-	 * We only read at most one line from the client. Ignore
-	 * any additional data sent, and remove the read event.
+	 * Finished reading at least one line. Reset read offset
+	 * and disable interpretation of any additional reads.
 	 */
-	event_del(c->readev);
+	c->reading = false;
+	c->readoff = 0;
 	char *get = strtok(c->buf, " "),
 		 *url = strtok(NULL, " "),
 		 *http = strtok(NULL, " ");
@@ -209,11 +215,11 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	}
 	evutil_make_socket_nonblocking(clientsock);
 	struct client *c = g_slice_alloc(sizeof(struct client));
-	c->readpending = 0;
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	c->timeout = false;
 	c->shutdown = false;
+	c->reading = true;
 	c->fd = clientsock;
 	c->mpeg_handle = NULL;
 	int ret = getnameinfo((struct sockaddr *) &addr, addrlen, c->clientname, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST) < 0;
