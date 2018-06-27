@@ -156,16 +156,20 @@ static void register_callback(GSList *it, struct transponder *a, uint16_t pid) {
 static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	int j;
 
+	//logger(LOG_DEBUG, "Handling new PMT on PID %u", pid);
+
 	if(!pmt_validate(section)) {
-		//logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
+		logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
 		free(section);
 		return;
 	}
 
 	uint8_t *es;
 	// Register callback for all elementary streams for this SID
-	for(j = 0; (es = pmt_get_es(section, j)); j++)
+	for(j = 0; (es = pmt_get_es(section, j)); j++) {
+		//logger(LOG_NOTICE, "Adding callback for PID %d", pmtn_get_pid(es));
 		register_callback(a->pids[pid].callback, a, pmtn_get_pid(es));
+	}
 	// ... and for the PCR
 	register_callback(a->pids[pid].callback, a, pmt_get_pcrpid(section));
 
@@ -185,7 +189,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	//logger(LOG_DEBUG, "Handling new PAT");
 
 	if(!pat_validate(section)) {
-		//logger(LOG_DEBUG, "PAT did not validate!");
+		logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
 		free(section);
 		return;
 	}
@@ -206,7 +210,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 
 		a->tsid = pat_get_tsid(cur);
 
-		/* 
+		/*
 		 * For every proram in this PAT, check whether we have clients
 		 * that request it. Add callbacks for them, if necessary.
 		 */
@@ -311,8 +315,10 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		/* The following code is based on bitstream examples */
 
 		if(ts_check_duplicate(ts_get_cc(cur), a->pids[pid].last_cc) ||
-				!ts_has_payload(cur))
+				!ts_has_payload(cur)) {
+			logger(LOG_DEBUG, "Ignoring input packet: duplicate or no payload");
 			continue;
+		}
 		if(ts_check_discontinuity(ts_get_cc(cur), a->pids[pid].last_cc))
 			psi_assemble_reset(&a->pids[pid].psi_buffer, &a->pids[pid].psi_buffer_used);
 
