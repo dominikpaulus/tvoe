@@ -2,7 +2,7 @@
 
 %{
 #define YY_NO_INPUT
-#include "config_parser.h"
+#include "config_parser.hpp"
 
 extern const char *conffile;
 
