@@ -35,7 +35,7 @@ struct http_output {
 	struct event *timer;
 };
 
-struct client {
+struct http_client {
 	evutil_socket_t fd;
 	struct event *readev, *writeev;
 
@@ -63,7 +63,7 @@ void http_add_channel(const char *name, int sid, struct tune t) {
 	urls = g_slist_prepend(urls, u);
 }
 
-static void terminate_client(struct client *c) {
+static void terminate_client(struct http_client *c) {
 	logger(LOG_INFO, "[%s] Terminating connection", c->clientname);
 	event_del(c->readev);
 	event_del(c->writeev);
@@ -72,16 +72,16 @@ static void terminate_client(struct client *c) {
 	close(c->fd);
 	if(c->mpeg_handle)
 		mpeg_unregister(c->mpeg_handle);
-	g_slice_free1(sizeof(struct client), c);
+	g_slice_free1(sizeof(struct http_client), c);
 }
 
 void client_timeout(evutil_socket_t sock, short event, void *p) {
-	struct client *c = (struct client *) p;
+	struct http_client *c = (struct http_client *) p;
 	terminate_client(c);
 }
 
 static void client_senddata(void *p, const uint8_t *buf, uint16_t bufsize) {
-	struct client *c = (struct client *) p;
+	struct http_client *c = (struct http_client *) p;
 	if(c->timeout)
 		return;
 	if(c->fill + bufsize > CLIENTBUF) {
@@ -110,7 +110,7 @@ static void client_senddata(void *p, const uint8_t *buf, uint16_t bufsize) {
 
 static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	//logger(LOG_DEBUG, "readev() called");
-	struct client *c = (struct client *) p;
+	struct http_client *c = (struct http_client *) p;
 	int ret = recv(fd, c->buf + c->readoff, sizeof(c->buf) - c->readoff - 1, 0);
 	/* Read error, terminated connection or no proper client request */
 	if(ret <= 0) {
@@ -191,7 +191,7 @@ static int min(int a, int b) {
 }
 static void handle_writeev(evutil_socket_t fd, short events, void *p) {
 	/* Send buffered data to client */
-	struct client *c = (struct client *) p;
+	struct http_client *c = (struct http_client *) p;
 	int tosend = min(c->fill, CLIENTBUF - c->cb_outptr);
 	ssize_t res = send(fd, c->writebuf + c->cb_outptr, tosend, 0);
 	if(res < 0) {
@@ -221,7 +221,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		return;
 	}
 	evutil_make_socket_nonblocking(clientsock);
-	struct client *c = (struct client *) g_slice_alloc(sizeof(struct client));
+	struct http_client *c = (struct http_client *) g_slice_alloc(sizeof(struct http_client));
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	c->timeout = false;
@@ -237,7 +237,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	c->readev = event_new(evbase, clientsock, EV_READ | EV_PERSIST, handle_readev, c);
 	if(!c->readev) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
-		g_slice_free1(sizeof(struct client), c);
+		g_slice_free1(sizeof(struct http_client), c);
 		close(clientsock);
 		return;
 	}
@@ -245,7 +245,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 	if(!c->writeev) {
 		logger(LOG_ERR, "Unable to allocate new event: event_new() returned NULL");
 		event_free(c->readev);
-		g_slice_free1(sizeof(struct client), c);
+		g_slice_free1(sizeof(struct http_client), c);
 		close(clientsock);
 		return;
 	}

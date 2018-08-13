@@ -1,11 +1,11 @@
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdbool>
+#include <cstdlib>
 #include <bitstream/mpeg/ts.h>
 #include <bitstream/mpeg/psi.h>
 #include <bitstream/mpeg/psi/pmt_print.h>
 #include <glib.h>
-#include <assert.h>
+#include <cassert>
 #include "mpeg.h"
 #include "log.h"
 
@@ -28,7 +28,7 @@ const int MAX_TRANSPONDER_RETRIES = 64;
 /*
  * Struct describing one specific client and the associated callbacks
  */
-struct client {
+struct mpeg_client {
 	/** sid requested by this client */
 	int sid;
 	/** As we send different PATs to different clients, we have a per-client
@@ -77,7 +77,7 @@ static GSList *transponders;
 
 /* Helper function for send_pat(). Send a PSI section to the client. */
 /* This code is copied from bitstream examples. See LICENSE. */
-static void output_psi_section(struct transponder *a, struct client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
+static void output_psi_section(struct mpeg_client *c, uint8_t *section, uint16_t pid, uint8_t *cc) {
     uint16_t section_length = psi_get_length(section) + PSI_HEADER_SIZE;
     uint16_t section_offset = 0;
     do {
@@ -103,7 +103,7 @@ static void output_psi_section(struct transponder *a, struct client *c, uint8_t 
  * Assemble new PAT containing only the SID requested by the client and
  * sent it to him.
  */
-static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint16_t pid) {
+static void send_pat(struct transponder *a, struct mpeg_client *c, uint16_t sid, uint16_t pid) {
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
 
@@ -125,7 +125,7 @@ static void send_pat(struct transponder *a, struct client *c, uint16_t sid, uint
     pat_set_length(pat, pat_n - pat - PAT_HEADER_SIZE);
     psi_set_crc(pat);
 
-	output_psi_section(a, c, pat, PAT_PID, &c->pid0_cc);
+	output_psi_section(c, pat, PAT_PID, &c->pid0_cc);
 
     free(pat);
 }
@@ -225,7 +225,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 			 * once a second, so this should not hurt.
 			 */
 			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
-				struct client *c = (struct client *) it->data;
+				struct mpeg_client *c = (struct mpeg_client *) it->data;
 				if(c->sid != cur_sid)
 					continue;
 
@@ -305,7 +305,7 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
-			struct client *c = (struct client *) it->data;
+			struct mpeg_client *c = (struct mpeg_client *) it->data;
 			c->cb(c->ptr, cur, TS_SIZE);
 		}
 
@@ -363,7 +363,7 @@ void mpeg_notify_timeout(void *handle) {
 		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
 		GSList *copy = g_slist_copy(t->clients);
 		for(GSList *it = copy; it; it = g_slist_next(it)) {
-			struct client *scb = (struct client *) it->data;
+			struct mpeg_client *scb = (struct mpeg_client *) it->data;
 			scb->timeout_cb(scb->ptr);
 		}
 		g_slist_free(copy);
@@ -374,7 +374,7 @@ void mpeg_notify_timeout(void *handle) {
 
 void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t),
 		void (*timeout_cb) (void *), void *ptr) {
-	struct client *scb = (struct client *) g_slice_alloc(sizeof(struct client));
+	struct mpeg_client *scb = (struct mpeg_client *) g_slice_alloc(sizeof(struct mpeg_client));
 	scb->cb = cb;
 	scb->timeout_cb = timeout_cb;
 	scb->ptr = ptr;
@@ -405,7 +405,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t
 	t->frontend_handle = frontend_acquire(s, t);
 	if(!t->frontend_handle) { // Unable to acquire frontend
 		g_slice_free1(sizeof(struct transponder), t);
-		g_slice_free1(sizeof(struct client), scb);
+		g_slice_free1(sizeof(struct mpeg_client), scb);
 		logger(LOG_NOTICE, "Unable to allocate new frontend.");
 		return NULL;
 	}
@@ -427,7 +427,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t
 }
 
 void mpeg_unregister(void *ptr) {
-	struct client *scb = (struct client *) ptr;
+	struct mpeg_client *scb = (struct mpeg_client *) ptr;
 	struct transponder *t = scb->t;
 	t->users--;
 	if(!t->users) { // Completely remove transponder
@@ -437,18 +437,18 @@ void mpeg_unregister(void *ptr) {
 			psi_assemble_reset(&t->pids[i].psi_buffer, &t->pids[i].psi_buffer_used);
 			g_slist_free(t->pids[i].callback);
 		}
-		g_slice_free1(sizeof(struct client), scb);
+		g_slice_free1(sizeof(struct mpeg_client), scb);
 		transponders = g_slist_remove(transponders, t);
 		g_slice_free1(sizeof(struct transponder), t);
 	} else { // Only unregister this client
-		/* 
+		/*
 		 * Iterate over all callbacks and remove this client from them.  This
 		 * is expensive, however, disconnects should be rather rare.
 		 */
 		for(int i=0; i < MAX_PID; i++)
 			t->pids[i].callback = g_slist_remove(t->pids[i].callback, scb);
 		t->clients = g_slist_remove(t->clients, scb);
-		g_slice_free1(sizeof(struct client), scb);
+		g_slice_free1(sizeof(struct mpeg_client), scb);
 		logger(LOG_INFO, "Client quitted, new transponder user count: %d",
 				t->users);
 	}
