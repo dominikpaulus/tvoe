@@ -23,6 +23,10 @@
 size_t dmxbuf = 0;
 
 static GList *idle_fe, *used_fe;
+/*
+ * Lock for idle_fe queue. used_fe is not accessed
+ * concurrently.
+ */
 static GMutex queue_lock;
 
 static void dvr_callback(evutil_socket_t fd, short int flags, void *arg);
