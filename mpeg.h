@@ -1,9 +1,9 @@
 #ifndef __INCLUDED_TVOE_MPEG
 #define __INCLUDED_TVOE_MPEG
 
-#include <stddef.h>
+#include <cstddef>
 #include <event.h>
-#include <stdint.h>
+#include <cstdint>
 #include "frontend.h"
 
 #define MAX_PID 0x2000

@@ -1,7 +1,7 @@
 #ifndef __INCLUDED_TVOE_HTTP
 #define __INCLUDED_TVOE_HTTP
 
-#include <stdint.h>
+#include <cstdint>
 #include "frontend.h"
 
 /**

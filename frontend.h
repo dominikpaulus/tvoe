@@ -1,7 +1,7 @@
 #ifndef __INCLUDED_TVOE_FRONTEND
 #define __INCLUDED_TVOE_FRONTEND
 
-#include <stdbool.h>
+#include <cstdbool>
 
 struct tune {
 	/** Delivery system type, reserved for future use */
@@ -58,6 +58,6 @@ void frontend_init(void);
 /**
  * Send a (HTML-formatted) list of current idle/used transponders
  */
-void send_transponder_list(void *p, void (*sendfn)(void *, const uint8_t *, uint16_t));
+void send_transponder_list(void (*sendfn)(string));
 
 #endif

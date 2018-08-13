@@ -1,12 +1,12 @@
 #include <glib.h>
 #include <arpa/inet.h>
-#include <string.h>
+#include <cstring>
 #include <fcntl.h>
-#include <errno.h>
+#include <cerrno>
 #include <event.h>
 #include <event2/http.h>
 #include <unistd.h>
-#include <assert.h>
+#include <cassert>
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
@@ -161,7 +161,9 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	if(!strcmp(url, "/status/transponders.html")) {
 		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
 		client_senddata(c, (const uint8_t *) response, strlen(response));
-		send_transponder_list(c, client_senddata);
+		send_transponder_list(c, [&](string s) {
+			client_senddata(c, (const uint8_t *) s.c_str(), s.size());
+		});
 		c->shutdown = true;
 		return;
 	}
@@ -254,7 +256,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 
 int http_init(uint16_t port) {
 	listenSock = socket(AF_INET6, SOCK_STREAM, 0); /* Rely on bindv6only = 0 */
-	if(socket < 0) {
+	if(listenSock < 0) {
 		logger(LOG_ERR, "Unable to create listener socket: %s", strerror(errno));
 		return -1;
 	}

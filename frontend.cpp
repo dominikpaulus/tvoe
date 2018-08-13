@@ -14,6 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <string>
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
@@ -436,20 +437,16 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	return 0;
 }
 
-static void send_str(void *p, void (*sendfn)(void*, const uint8_t*, uint16_t), const char *const str) {
-	sendfn(p, (const uint8_t *) str, strlen(str));
-}
-
-void send_transponder_list(void *p, void (*sendfn)(void *, const uint8_t *, uint16_t)) {
-	send_str(p, sendfn,
+void send_transponder_list(void *p, void (*sendfn)(string s)) {
+	sendfn(
 		"<!DOCTYPE html>"
 		"<html lang=\"de\">"
 		"<head><title>tvoe transponder/frontend list</title></head>"
 		"<body>");
 
 	{
-		send_str(p, sendfn, "<h3>List of currently idle frontends</h3>");
-		send_str(p, sendfn, "<ul>");
+		sendfn("<h3>List of currently idle frontends</h3>");
+		sendfn("<ul>");
 		g_mutex_lock(&queue_lock);
 		GList *it = g_list_first(idle_fe);
 		while(it != NULL) {
@@ -457,13 +454,12 @@ void send_transponder_list(void *p, void (*sendfn)(void *, const uint8_t *, uint
 			char buf[1024];
 			snprintf(buf, sizeof(buf), "<li> adapter%d/frontend%d (%s)",
 				fe->adapter, fe->frontend, fe->name);
-			send_str(p, sendfn, buf);
+			sendfn(buf);
 			it = it->next;
 		}
 		g_mutex_unlock(&queue_lock);
-		send_str(p, sendfn, "</ul>");
+		sendfn("</ul>");
 	}
 
-	send_str(p, sendfn,
-		"</body></html>");
+	sendfn("</body></html>");
 }
