@@ -303,6 +303,12 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 		if(pid >= MAX_PID - 1)
 			continue;
 
+		/*
+		 * If this happens, we have some stale frontends. This
+		 * is a bug.
+		 */
+		assert(a->pids[pid].callback != NULL);
+
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
 			struct mpeg_client *c = (struct mpeg_client *) it->data;
