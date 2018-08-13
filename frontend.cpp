@@ -240,7 +240,7 @@ static void *tune_worker(void *ptr) {
 			if(open_fe(fe) && tune_to_fe(fe)) {
 				g_mutex_lock(&fe->lock);
 				if(fe->state == state_stale)
-					assert(event_base_once(NULL, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
+					assert(event_base_once(evbase, -1, EV_TIMEOUT, fe_open_failed, fe, NULL) != -1);
 				else
 					fe->state = state_active;
 				g_mutex_unlock(&fe->lock);
