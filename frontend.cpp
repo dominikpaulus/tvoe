@@ -1,20 +1,24 @@
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdlib>
+#include <cassert>
+#include <cstdio>
+#include <cstdint>
+#include <cstdbool>
+#include <cstring>
+
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
+
 #include <glib-2.0/glib.h>
 #include <event.h>
 #include <errno.h>
-#include <string.h>
 #include <unistd.h>
-#include <assert.h>
+
 #include <string>
+
 #include "frontend.h"
 #include "log.h"
 #include "mpeg.h"
@@ -247,7 +251,7 @@ static void *tune_worker(void *ptr) {
 			}
 		} else
 			release_fe(fe);
-		g_slice_free(struct work, w);
+		delete w;
 	}
 	return NULL;
 }
@@ -319,7 +323,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 	used_fe = g_list_append(used_fe, fe);
 
 	// Tell tuning thread to tune
-	struct work *w = g_slice_new(struct work);
+	struct work *w = new struct work;
 	w->action = FE_WORK_TUNE;
 	w->fe = fe;
 	fe->state = state_tuning;
@@ -350,7 +354,7 @@ void frontend_release(void *ptr) {
 	}
 
 	used_fe = g_list_remove(used_fe, fe);
-	struct work *w = g_slice_new(struct work);
+	struct work *w = new struct work;
 	w->action = FE_WORK_RELEASE;
 	w->fe = fe;
 	g_async_queue_push(work_queue, w);
@@ -420,7 +424,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 		return -1;
 	}
 
-	struct frontend *fe = (struct frontend *) g_slice_alloc0(sizeof(struct frontend));
+	struct frontend *fe = new struct frontend;
 	/* Copy list of frontend capabilities */
 	fe->caps.len = prop.u.buffer.len;
 	for(unsigned int i = 0; i < prop.u.buffer.len; ++i)
