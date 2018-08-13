@@ -158,6 +158,13 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	}
 	/* Find matching SID/URL and add client to callback list */
 	logger(LOG_INFO, "[%s] GET %s", c->clientname, url);
+	if(!strcmp(url, "/status/transponders.html")) {
+		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
+		client_senddata(c, (void*) response, strlen(response));
+		send_transponder_list(c, client_senddata);
+		c->shutdown = true;
+		return;
+	}
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
 		struct url *u = it->data;
 		if(strcmp(u->text, url))

@@ -55,4 +55,9 @@ int frontend_add(int adapter, int frontend, struct lnb l);
  */
 void frontend_init(void);
 
+/**
+ * Send a (HTML-formatted) list of current idle/used transponders
+ */
+void send_transponder_list(void *p, void (*sendfn)(void *, const uint8_t *, uint16_t));
+
 #endif

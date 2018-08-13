@@ -55,6 +55,7 @@ struct frontend {
 	void *mpeg_handle;	/**< Handle for associated MPEG-TS decoder (see mpeg.c) */
 	int state;			/**< Frontend currently in use */
 	GMutex lock;		/**< Lock for synchronizing worker thread */
+	const char *name;	/**< Human-readable frontend/demod name */
 };
 
 /** Compute program frequency based on transponder frequency
@@ -428,5 +429,38 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	idle_fe = g_list_append(idle_fe, fe);
 	logger(LOG_INFO, "Frontend adapter%d/frontend%d (%s) attached",
 			adapter, frontend, info.name);
+	fe->name = strdup(info.name);
 	return 0;
+}
+
+static void send_str(void *p, void (*sendfn)(void*, const uint8_t*, uint16_t), const char *const str) {
+	sendfn(p, (const uint8_t *) str, strlen(str));
+}
+
+void send_transponder_list(void *p, void (*sendfn)(void *, const uint8_t *, uint16_t)) {
+	send_str(p, sendfn,
+		"<!DOCTYPE html>"
+		"<html lang=\"de\">"
+		"<head><title>tvoe transponder/frontend list</title></head>"
+		"<body>");
+
+	{
+		send_str(p, sendfn, "<h3>List of currently idle frontends</h3>");
+		send_str(p, sendfn, "<ul>");
+		g_mutex_lock(&queue_lock);
+		GList *it = g_list_first(idle_fe);
+		while(it != NULL) {
+			struct frontend *fe = (struct frontend *) (it->data);
+			char buf[1024];
+			snprintf(buf, sizeof(buf), "<li> adapter%d/frontend%d (%s)",
+				fe->adapter, fe->frontend, fe->name);
+			send_str(p, sendfn, buf);
+			it = it->next;
+		}
+		g_mutex_unlock(&queue_lock);
+		send_str(p, sendfn, "</ul>");
+	}
+
+	send_str(p, sendfn,
+		"</body></html>");
 }
