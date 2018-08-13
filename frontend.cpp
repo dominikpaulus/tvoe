@@ -461,5 +461,22 @@ void send_transponder_list(function<void(string)> sendfn) {
 		sendfn("</ul>");
 	}
 
+	{
+		sendfn("<h3>List of currently busy frontends</h3>");
+		sendfn("<ul>");
+		g_mutex_lock(&queue_lock);
+		GList *it = g_list_first(used_fe);
+		while(it != NULL) {
+			struct frontend *fe = (struct frontend *) (it->data);
+			char buf[1024];
+			snprintf(buf, sizeof(buf), "<li> adapter%d/frontend%d (%s)",
+				fe->adapter, fe->frontend, fe->name);
+			sendfn(buf);
+			it = it->next;
+		}
+		g_mutex_unlock(&queue_lock);
+		sendfn("</ul>");
+	}
+
 	sendfn("</body></html>");
 }
