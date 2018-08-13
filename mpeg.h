@@ -29,7 +29,7 @@ void mpeg_input(void *handle, unsigned char *data, size_t len);
  * @param ptr Pointer to be passed to the callback when invoked
  * @return Pointer to client handle, to be passed to mpeg_unregister()
  */
-void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *buf, uint16_t bufsize),
+void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *buf, uint16_t bufsize),
 		void (*timeout_cb) (void *), void *ptr);
 /**
  * Deregister a specific client

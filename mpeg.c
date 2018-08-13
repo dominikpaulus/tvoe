@@ -37,7 +37,7 @@ struct client {
 	/** Associated transponder */
 	struct transponder *t;
 	/** Callback for MPEG-TS input */
-	void (*cb) (void *, uint8_t *, uint16_t);
+	void (*cb) (void *, const uint8_t *, uint16_t);
 	/** Callback to call on timeout */
 	void (*timeout_cb) (void *);
 	/** Argument to supply to the callback functions */
@@ -372,7 +372,7 @@ void mpeg_notify_timeout(void *handle) {
 	}
 }
 
-void *mpeg_register(struct tune s, void (*cb) (void *, uint8_t *, uint16_t),
+void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t),
 		void (*timeout_cb) (void *), void *ptr) {
 	struct client *scb = g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;

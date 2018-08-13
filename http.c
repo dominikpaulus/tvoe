@@ -80,7 +80,7 @@ void client_timeout(evutil_socket_t sock, short event, void *p) {
 	terminate_client(c);
 }
 
-static void client_senddata(void *p, uint8_t *buf, uint16_t bufsize) {
+static void client_senddata(void *p, const uint8_t *buf, uint16_t bufsize) {
 	struct client *c = (struct client *) p;
 	if(c->timeout)
 		return;
