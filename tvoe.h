@@ -6,6 +6,6 @@
 /*
  * Common event base used throughout tvoe
  */
-struct event_base *evbase;
+extern struct event_base *evbase;
 
 #endif

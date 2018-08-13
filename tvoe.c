@@ -14,6 +14,7 @@
 #include "log.h"
 #include "tvoe.h"
 
+struct event_base *evbase;
 const char *conffile = "./tvoe.conf";
 extern int loglevel;
 static bool daemonize = true;
