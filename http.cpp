@@ -161,7 +161,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	if(!strcmp(url, "/status/transponders.html")) {
 		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
 		client_senddata(c, (const uint8_t *) response, strlen(response));
-		send_transponder_list(c, [&](string s) {
+		send_transponder_list([&](string s) {
 			client_senddata(c, (const uint8_t *) s.c_str(), s.size());
 		});
 		c->shutdown = true;

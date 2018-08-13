@@ -437,7 +437,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	return 0;
 }
 
-void send_transponder_list(void *p, void (*sendfn)(string s)) {
+void send_transponder_list(function<void(string)> sendfn) {
 	sendfn(
 		"<!DOCTYPE html>"
 		"<html lang=\"de\">"
