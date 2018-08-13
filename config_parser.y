@@ -40,10 +40,14 @@ static void parse_error(char *text, ...)
 	yyerror(error);
 }
 
-int yywrap()
+extern "C" {
+
+int yywrap(void)
 {
 	fclose(yyin);
         return 1;
+}
+
 }
 
 void init_parser() {

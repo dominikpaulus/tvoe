@@ -96,6 +96,9 @@ static GAsyncQueue *work_queue;
  * Open frontend descriptors
  */
 static bool open_fe(struct frontend *fe) {
+	struct event *ev;
+	struct timeval tv;
+
 	/* Open frontend, demuxer and DVR output */
 	char path_fe[512], path_dmx[512], path_dvr[512];
 	snprintf(path_fe, sizeof(path_fe), "/dev/dvb/adapter%d/frontend%d", fe->adapter, fe->frontend);
@@ -109,8 +112,8 @@ static bool open_fe(struct frontend *fe) {
 		goto dvr_err;
 
 	/* Add libevent callback for TS input */
-	struct event *ev = event_new(evbase, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
-	struct timeval tv = { 3, 0 }; // 3s timeout
+	ev = event_new(evbase, fe->dvr_fd, EV_READ | EV_PERSIST, dvr_callback, fe);
+	tv = { 3, 0 }; // 3s timeout
 	if(event_add(ev, &tv)) {
 		logger(LOG_ERR, "Adding frontend to libevent failed.");
 		close(fe->fe_fd);
@@ -221,7 +224,7 @@ static void release_fe(struct frontend *fe) {
  */
 static void *tune_worker(void *ptr) {
 	for(;;) {
-		struct work *w = g_async_queue_pop(work_queue);
+		struct work *w = (struct work *) g_async_queue_pop(work_queue);
 		struct frontend *fe = w->fe;
 		if(w->action == FE_WORK_TUNE) {
 			/*
@@ -325,7 +328,7 @@ void *frontend_acquire(struct tune s, void *ptr) {
 }
 
 void frontend_release(void *ptr) {
-	struct frontend *fe = ptr;
+	struct frontend *fe = (struct frontend *) ptr;
 	logger(LOG_DEBUG, "Releasing frontend %d/%d", fe->adapter, fe->frontend);
 	g_mutex_lock(&fe->lock);
 	if(fe->state == state_tuning) {
@@ -416,7 +419,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 		return -1;
 	}
 
-	struct frontend *fe = g_slice_alloc0(sizeof(struct frontend));
+	struct frontend *fe = (struct frontend *) g_slice_alloc0(sizeof(struct frontend));
 	/* Copy list of frontend capabilities */
 	fe->caps.len = prop.u.buffer.len;
 	for(int i = 0; i < prop.u.buffer.len; ++i)

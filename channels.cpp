@@ -36,9 +36,9 @@ int parse_channels(const char *file) {
 	 * Iterate over channels in zap file
 	 */
 	for(cnt = 0; cur != NULL; ++cnt) {
-		struct tune s = {
-			.sid = cur->service_id
-		};
+		struct tune s;
+		memset(&s, 0x0, sizeof(struct tune));
+		s.sid = cur->service_id;
 		if(cur->sat_number > 0 || cur->freq_bpf != 0) {
 			logger(LOG_ERR, "Channel \"%s\" has unsupported settings (probably DiSeqC or Unicable)",
 				cur->channel);

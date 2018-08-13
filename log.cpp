@@ -15,7 +15,7 @@ int loglevel = 2;
 static FILE * log_fd;
 extern bool daemonized;
 
-void logger(int level, char *fmt, ...) {
+void logger(int level, const char *fmt, ...) {
 	char text[2048], timestamp[256];
 	time_t t;
 	struct tm * ti;

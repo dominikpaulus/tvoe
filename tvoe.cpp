@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
 				return EXIT_FAILURE;
 			}
 			snprintf(pid, 8, "%d\n", getpid());
-			if(write(pidfd, pid, strlen(pid)) != strlen(pid)) {
+			if(write(pidfd, pid, strlen(pid)) != (ssize_t) strlen(pid)) {
 				logger(LOG_ERR, "Unable to write to PID file %s: %s",
 						pidfile, pidfile);
 				return EXIT_FAILURE;

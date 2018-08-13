@@ -57,7 +57,7 @@ struct client {
 void http_add_channel(const char *name, int sid, struct tune t) {
 	char text[128];
 	snprintf(text, sizeof(text), "/by-sid/%d", sid);
-	struct url *u = g_slice_alloc(sizeof(struct url));
+	struct url *u = (struct url *) g_slice_alloc(sizeof(struct url));
 	u->t = t;
 	u->text = strdup(text);
 	urls = g_slist_prepend(urls, u);
@@ -131,7 +131,7 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	if(c->readoff == sizeof(c->buf) - 1) {
 		logger(LOG_INFO, "[%s] Client request has exceeded input buffer size", c->clientname);
 		const char *response = "HTTP/1.1 400 Maximum request size exceeded\r\n\r\n";
-		client_senddata(c, (void*) response, strlen(response));
+		client_senddata(c, (const uint8_t *) response, strlen(response));
 		c->shutdown = true;
 		return;
 	}
@@ -160,13 +160,13 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 	logger(LOG_INFO, "[%s] GET %s", c->clientname, url);
 	if(!strcmp(url, "/status/transponders.html")) {
 		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
-		client_senddata(c, (void*) response, strlen(response));
+		client_senddata(c, (const uint8_t *) response, strlen(response));
 		send_transponder_list(c, client_senddata);
 		c->shutdown = true;
 		return;
 	}
 	for(GSList *it = urls; it != NULL; it = g_slist_next(it)) {
-		struct url *u = it->data;
+		struct url *u = (struct url *) it->data;
 		if(strcmp(u->text, url))
 			continue;
 		logger(LOG_DEBUG, "Found requested URL");
@@ -174,12 +174,12 @@ static void handle_readev(evutil_socket_t fd, short events, void *p) {
 		if(!(c->mpeg_handle = mpeg_register(u->t, client_senddata, (void (*) (void *)) terminate_client, c))) {
 			logger(LOG_NOTICE, "HTTP: Unable to fulfill request: mpeg_register() failed");
 			const char *response = "HTTP/1.1 503 No tuner available to fulfil your request\r\n\r\n";
-			client_senddata(c, (void*) response, strlen(response));
+			client_senddata(c, (const uint8_t *) response, strlen(response));
 			c->shutdown = true;
 			return;
 		}
 		const char *response = "HTTP/1.1 200 OK\r\n\r\n";
-		client_senddata(c, (void*) response, strlen(response));
+		client_senddata(c, (const uint8_t *) response, strlen(response));
 		return;
 	}
 	logger(LOG_INFO, "Client %s requested invalid URL %s, terminating connection", c->clientname, url);
@@ -221,7 +221,7 @@ void http_connect_cb(evutil_socket_t sock, short foo, void *p) {
 		return;
 	}
 	evutil_make_socket_nonblocking(clientsock);
-	struct client *c = g_slice_alloc(sizeof(struct client));
+	struct client *c = (struct client *) g_slice_alloc(sizeof(struct client));
 	c->readoff = 0;
 	c->cb_inptr = c->cb_outptr = c->fill = 0;
 	c->timeout = false;
@@ -264,11 +264,11 @@ int http_init(uint16_t port) {
 		int flag = 1;
 		setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
 	}
-	struct sockaddr_in6 n = {
-		.sin6_family = AF_INET6,
-		.sin6_port = htons(port),
-		.sin6_addr = in6addr_any
-	};
+	struct sockaddr_in6 n;
+	memset(&n, 0x0, sizeof(struct sockaddr_in6));
+	n.sin6_family = AF_INET6;
+	n.sin6_port = htons(port);
+	n.sin6_addr = in6addr_any;
 	if(bind(listenSock, (struct sockaddr *) &n, sizeof(n)) < 0) {
 		logger(LOG_ERR, "Unable to bind to port %d: %s", port, strerror(errno));
 		return -2;

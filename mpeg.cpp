@@ -225,7 +225,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 			 * once a second, so this should not hurt.
 			 */
 			for(GSList *it = a->clients; it != NULL; it = g_slist_next(it)) {
-				struct client *c = it->data;
+				struct client *c = (struct client *) it->data;
 				if(c->sid != cur_sid)
 					continue;
 
@@ -284,7 +284,7 @@ static void handle_section(struct transponder *a, uint16_t pid, uint8_t *section
 }
 
 void mpeg_input(void *ptr, unsigned char *data, size_t len) {
-	struct transponder *a = ptr;
+	struct transponder *a = (struct transponder *) ptr;
 
 	if(len % TS_SIZE) {
 		logger(LOG_NOTICE, "Unaligned MPEG-TS packets received, dropping.");
@@ -305,7 +305,7 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {
-			struct client *c = it->data;
+			struct client *c = (struct client *) it->data;
 			c->cb(c->ptr, cur, TS_SIZE);
 		}
 
@@ -350,7 +350,7 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
  * Called if transponder times out waiting for data
  */
 void mpeg_notify_timeout(void *handle) {
-	struct transponder *t = handle;
+	struct transponder *t = (struct transponder *) handle;
 	t->retry_count++;
 	frontend_release(t->frontend_handle);
 	if(t->retry_count <= MAX_TRANSPONDER_RETRIES) {
@@ -363,7 +363,7 @@ void mpeg_notify_timeout(void *handle) {
 		logger(LOG_ERR, "Unable to acquire transponder while looking for replacement after timeout");
 		GSList *copy = g_slist_copy(t->clients);
 		for(GSList *it = copy; it; it = g_slist_next(it)) {
-			struct client *scb = it->data;
+			struct client *scb = (struct client *) it->data;
 			scb->timeout_cb(scb->ptr);
 		}
 		g_slist_free(copy);
@@ -374,7 +374,7 @@ void mpeg_notify_timeout(void *handle) {
 
 void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t),
 		void (*timeout_cb) (void *), void *ptr) {
-	struct client *scb = g_slice_alloc(sizeof(struct client));
+	struct client *scb = (struct client *) g_slice_alloc(sizeof(struct client));
 	scb->cb = cb;
 	scb->timeout_cb = timeout_cb;
 	scb->ptr = ptr;
@@ -385,7 +385,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t
 	 * the requested program */
 	GSList *it = transponders;
 	for(; it != NULL; it = g_slist_next(it)) {
-		struct transponder *t = it->data;
+		struct transponder *t = (struct transponder *) it->data;
 		struct tune in = t->in;
 		if(in.delivery_system == s.delivery_system &&
 				in.dvbs.symbol_rate == s.dvbs.symbol_rate &&
@@ -401,7 +401,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t
 	}
 
 	/* We aren't, acquire new frontend */
-	struct transponder *t = g_slice_alloc(sizeof(struct transponder));
+	struct transponder *t = (struct transponder *) g_slice_alloc(sizeof(struct transponder));
 	t->frontend_handle = frontend_acquire(s, t);
 	if(!t->frontend_handle) { // Unable to acquire frontend
 		g_slice_free1(sizeof(struct transponder), t);
@@ -427,7 +427,7 @@ void *mpeg_register(struct tune s, void (*cb) (void *, const uint8_t *, uint16_t
 }
 
 void mpeg_unregister(void *ptr) {
-	struct client *scb = ptr;
+	struct client *scb = (struct client *) ptr;
 	struct transponder *t = scb->t;
 	t->users--;
 	if(!t->users) { // Completely remove transponder
