@@ -103,7 +103,7 @@ static void output_psi_section(struct mpeg_client *c, uint8_t *section, uint16_t
  * Assemble new PAT containing only the SID requested by the client and
  * sent it to him.
  */
-static void send_pat(struct transponder *a, struct mpeg_client *c, uint16_t sid, uint16_t pid) {
+static void send_pat(struct mpeg_client *c, uint16_t sid, uint16_t pid) {
 	uint8_t *pat = psi_allocate();
 	uint8_t *pat_n, j = 0;
 
@@ -234,7 +234,7 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 				 * a new, reduced PAT on the remuxed transport
 				 * streams
 				 */
-				send_pat(a, c, cur_sid, patn_get_pid(program));
+				send_pat(c, cur_sid, patn_get_pid(program));
 
 				/*
 				 * If necessary, add this client as callback for the
@@ -295,19 +295,13 @@ void mpeg_input(void *ptr, unsigned char *data, size_t len) {
 	 * Loop over all packets, parse PSI tables, if necessary and forward them
 	 * to all requesting clients
 	 */
-	for(int i=0; i < len; i+=TS_SIZE) {
+	for(size_t i = 0; i < len; i += TS_SIZE) {
 		uint8_t *cur = data + i;
 		uint16_t pid = ts_get_pid(cur);
 		GSList *it;
 
 		if(pid >= MAX_PID - 1)
 			continue;
-
-		/*
-		 * If this happens, we have some stale frontends. This
-		 * is a bug.
-		 */
-		assert(a->pids[pid].callback != NULL);
 
 		// Send packet to clients
 		for(it = a->pids[pid].callback; it != NULL; it = g_slist_next(it)) {

@@ -408,7 +408,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	close(fd);
 	/* prop.u.buffer now contains a list of supported delivery subsystems */
 	bool known = false;
-	for(int i = 0; i < prop.u.buffer.len; ++i) {
+	for(unsigned int i = 0; i < prop.u.buffer.len; ++i) {
 		if(prop.u.buffer.data[i] == SYS_DVBS || prop.u.buffer.data[i] == SYS_DVBS2)
 			known = true;
 		logger(LOG_DEBUG, "Frontend adapter%d/frontend%d supports delivery subsystem %d",
@@ -423,7 +423,7 @@ int frontend_add(int adapter, int frontend, struct lnb l) {
 	struct frontend *fe = (struct frontend *) g_slice_alloc0(sizeof(struct frontend));
 	/* Copy list of frontend capabilities */
 	fe->caps.len = prop.u.buffer.len;
-	for(int i = 0; i < prop.u.buffer.len; ++i)
+	for(unsigned int i = 0; i < prop.u.buffer.len; ++i)
 		fe->caps.caps[i] = prop.u.buffer.data[i];
 	fe->lnb = l;
 	fe->adapter = adapter;

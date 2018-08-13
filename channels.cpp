@@ -45,7 +45,7 @@ int parse_channels(const char *file) {
 			fprintf(stderr, "%d %d\n", cur->sat_number, cur->freq_bpf);
 			goto next;
 		}
-		for(int i = 0; i < cur->n_props; ++i) {
+		for(unsigned int i = 0; i < cur->n_props; ++i) {
 			if(cur->props[i].cmd != DTV_DELIVERY_SYSTEM)
 				continue;
 
@@ -60,7 +60,7 @@ int parse_channels(const char *file) {
 				goto next;
 			}
 		}
-		for(int i = 0; i < cur->n_props; ++i) {
+		for(unsigned int i = 0; i < cur->n_props; ++i) {
 			if(cur->props[i].cmd == DTV_POLARIZATION) {
 				s.dvbs.polarization = cur->props[i].u.data == 1;
 			} else if(cur->props[i].cmd == DTV_FREQUENCY) {
