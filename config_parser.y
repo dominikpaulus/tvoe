@@ -30,7 +30,7 @@ void yyerror(const char *str)
 	exit(EXIT_FAILURE);
 }
 
-static void parse_error(char *text, ...) 
+static void parse_error(const char *text, ...)
 {
 	static char error[1024];
 	va_list args;

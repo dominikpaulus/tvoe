@@ -65,7 +65,7 @@ struct frontend {
 
 /** Compute program frequency based on transponder frequency
  * and LNB parameters. Ripped from getstream-poempel */
-static int get_frequency(int freq, struct lnb l) {
+static int get_frequency(unsigned int freq, struct lnb l) {
 	if(freq > 2200000) { /* Frequency contains l.osc.f. */
 		if(freq < l.slof)
 			return freq - l.lof1;
