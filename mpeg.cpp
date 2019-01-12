@@ -159,7 +159,6 @@ static void pmt_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	//logger(LOG_DEBUG, "Handling new PMT on PID %u", pid);
 
 	if(!pmt_validate(section)) {
-		logger(LOG_NOTICE, "Invalid PMT received on PID %u", pid);
 		free(section);
 		return;
 	}
@@ -189,7 +188,6 @@ static void pat_handler(struct transponder *a, uint16_t pid, uint8_t *section) {
 	//logger(LOG_DEBUG, "Handling new PAT");
 
 	if(!pat_validate(section)) {
-		logger(LOG_NOTICE, "Invalid PAT received on PID %u", pid);
 		free(section);
 		return;
 	}
