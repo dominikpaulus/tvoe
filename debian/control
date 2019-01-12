@@ -1,7 +1,7 @@
 Source: tvoe
 Section: utils
 Priority: optional
-Maintainer: Dominik Paulus <iridium@sieglitzhof.net>
+Maintainer: Dominik Paulus <tvoe@dominik-paulus.de>
 Uploaders: Christoph Egger <christoph@debian.org>
 Build-Depends:
  debhelper (>= 9~),
@@ -13,13 +13,13 @@ Build-Depends:
  flex,
  bison
 Standards-Version: 3.9.6
-Vcs-Browser: https://gitlab.com/dominikpaulus/tvoe
+Vcs-Browser: https://github.com/dominikpaulus/tvoe
 
 Package: tvoe
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, adduser
 Suggests: dvb-apps
 Description: Lightweight DVB-S/S2 TV streaming server
- tvoe is a small DVB-S/DAB-S streaming server inspired by the getstream
- utility, but with support for managing multiple tuners by one process and
- dynamically assigning available tuners to new clients.
+ tvoe is a small DVB-S/S2 streaming server inspired by the getstream utility,
+ but with support for managing multiple tuners by one process and dynamically
+ assigning available tuners to new clients.

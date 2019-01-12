@@ -1,11 +1,11 @@
-Source: git://git.faui2k11.de/tvoe.git
+Source: https://github.com/dominikpaulus/tvoe
 
 Files: *
-Copyright: 2013-2014 Dominik Paulus
+Copyright: 2013-2019 Dominik Paulus
 License: ISC license
 
 Files: debian/*
-Copyright: 2014 Dominik Paulus, Christoph Egger
+Copyright: 2014-2019 Dominik Paulus, Christoph Egger
 License: ISC license
 
 License: ISC license
